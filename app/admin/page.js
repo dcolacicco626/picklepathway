@@ -1,26 +1,47 @@
 // /app/admin/page.js
+export const dynamic = "force-dynamic"; // ⬅️ avoid prerendering
+
 import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import Link from "next/link";
 
 export default async function AdminIndexPage() {
+  const cookieStore = cookies();
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      // either the deprecated getAll/setAll…
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: () => {
+          // no-op on the server during render; Supabase may try to set refreshed cookies.
+          // That's fine—we don't need to set here.
+        },
+      },
+      // …or the new API (either is fine):
+      // cookies: {
+      //   get: (name) => cookieStore.get(name)?.value,
+      //   set: () => {},
+      //   remove: () => {},
+      // },
+    }
   );
 
-  // Grab the authed user (cookie-based session)
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } = { user: null } } = await supabase.auth.getUser();
   if (!user) {
     return <div style={{ padding: 24 }}>Please sign in to view your organizations.</div>;
   }
 
-  // Fetch orgs via memberships
   const { data: rows, error } = await supabase
     .from("memberships")
     .select("orgs:org_id ( id, name, slug, logo_url )")
     .eq("user_id", user.id);
 
-  if (error) return <div style={{ padding: 24 }}>Error: {error.message}</div>;
+  if (error) {
+    return <div style={{ padding: 24 }}>Error: {error.message}</div>;
+  }
 
   const orgs = (rows || []).map((r) => r.orgs).filter(Boolean);
 
