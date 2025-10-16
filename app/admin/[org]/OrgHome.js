@@ -4,13 +4,11 @@ export const dynamic = "force-dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "../lib/supabaseClient";
+// If you already use a path alias like "@/lib/supabaseClient", feel free to swap this import.
+// This relative path assumes the file lives at /app/admin/[org]/OrgHome.js
+import { supabase } from "../../../lib/supabaseClient";
 
 /* ========= Theme ========= */
-<div className="p-4 mb-4 rounded-xl bg-green-600 text-white">
-  If you see this green bar, Tailwind is working ✅
-</div>
-
 const brand = {
   bg: "bg-[#f7fbf8]",
   card: "bg-white shadow-sm rounded-2xl",
@@ -35,7 +33,7 @@ const fmtMDY = (d) => {
   return dt.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 };
 
-export default function HomePage() {
+export default function OrgHome({ orgId }) {
   const router = useRouter();
 
   const [divInput, setDivInput] = useState("");
@@ -50,10 +48,12 @@ export default function HomePage() {
     const { data, error } = await supabase
       .from("league")
       .select("*")
+      .eq("org_id", orgId) // 🔒 scope to active org
       .order("created_at", { ascending: false });
+
     if (!error) setLeagues(Array.isArray(data) ? data : []);
     setLoading(false);
-  }, []);
+  }, [orgId]);
 
   useEffect(() => {
     loadLeagues();
@@ -81,6 +81,7 @@ export default function HomePage() {
       const { data, error } = await supabase
         .from("league")
         .insert({
+          org_id: orgId, // 🔒 attach ownership
           slug,
           division: nameRaw,
           start_date: startDate || null,
@@ -89,12 +90,15 @@ export default function HomePage() {
         })
         .select("*")
         .maybeSingle();
+
       if (error) throw error;
       setDivInput("");
       setStartDate("");
       await loadLeagues();
-      // NEW: push to the new Admin route
-      router.push(`/admin/${data.slug}`);
+
+      // Keep legacy admin flow for now (your existing /l/[slug] admin pages).
+      // Later you can move to /admin/[org]/leagues/[slug]
+      router.push(`/l/${data.slug}`);
     } catch (e) {
       alert(e?.message || String(e));
     } finally {
@@ -128,8 +132,17 @@ export default function HomePage() {
   async function downloadCsvForLeague(league) {
     if (!league?.id) return;
     const [{ data: players }, { data: results }] = await Promise.all([
-      supabase.from("players").select("*").eq("league_id", league.id).order("created_at"),
-      supabase.from("week_results").select("*").eq("league_id", league.id),
+      supabase
+        .from("players")
+        .select("*")
+        .eq("league_id", league.id)
+        .eq("org_id", orgId) // 🔒 scope to org
+        .order("created_at"),
+      supabase
+        .from("week_results")
+        .select("*")
+        .eq("league_id", league.id)
+        .eq("org_id", orgId), // 🔒 scope to org
     ]);
 
     const resBy = {};
@@ -169,9 +182,7 @@ export default function HomePage() {
           <img src="/logo.png" alt="Pickle Pathway" className="h-40 w-auto rounded-lg ring-1 ring-slate-200" />
           <div className="flex-1">
             <h1 className="text-2xl font-bold">Home Page</h1>
-            <p className={`${brand.subtext} text-sm mt-1`}>
-              Manage divisions
-            </p>
+            <p className={`${brand.subtext} text-sm mt-1`}>Manage divisions</p>
           </div>
 
           <Link
@@ -244,7 +255,8 @@ export default function HomePage() {
                     ) : null}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <a href={`/admin/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
+                    {/* Keep legacy routes for now */}
+                    <a href={`/l/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
                       Admin
                     </a>
                     <a href={`/player/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>

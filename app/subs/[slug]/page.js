@@ -180,18 +180,7 @@ export default function SubsSignupPage() {
               <span className="font-medium">{league.division || league.slug}</span>.
             </p>
             <div className="flex gap-3 justify-center mt-4">
-              <button
-                onClick={() => setDone(false)}
-                className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50"
-              >
-                Add another
-              </button>
-              <button
-                onClick={() => router.push(`/admin/${league.slug}`)}
-                className="px-3 py-2 rounded-xl bg-[#0ea568] text-white hover:bg-[#0b8857]"
-              >
-                Back to Admin
-              </button>
+
             </div>
           </div>
         )}

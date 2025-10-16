@@ -1,24 +1,26 @@
-import { NextResponse } from 'next/server';
+// /middleware.js  (update, don’t replace)
+import { NextResponse } from "next/server";
 
 export function middleware(req) {
   const { pathname } = req.nextUrl;
-  const needsAuth = pathname === '/' || pathname.startsWith('/l/');
+  const needsAuth = pathname === "/" || pathname.startsWith("/l/");
 
-  if (!needsAuth) return NextResponse.next();
-
-  const header = req.headers.get('authorization') || '';
-  const [type, creds] = header.split(' ');
-  const [user, pass] = type === 'Basic' ? atob(creds || '').split(':') : [];
-
-  if (user === 'admin' && pass === process.env.ADMIN_PASSWORD) {
-    return NextResponse.next();
+  if (needsAuth) {
+    const header = req.headers.get("authorization") || "";
+    const [type, creds] = header.split(" ");
+    const [user, pass] = type === "Basic" ? atob(creds || "").split(":") : [];
+    if (user !== "admin" || pass !== process.env.ADMIN_PASSWORD) {
+      return new NextResponse("Unauthorized", {
+        status: 401,
+        headers: { "WWW-Authenticate": 'Basic realm="Restricted"' },
+      });
+    }
   }
 
-  return new NextResponse('Unauthorized', {
-    status: 401,
-    headers: { 'WWW-Authenticate': 'Basic realm="Restricted"' },
-  });
+  const res = NextResponse.next();
+  res.headers.set("x-host", req.headers.get("host") || "");
+  res.headers.set("x-pathname", req.nextUrl.pathname);
+  return res;
 }
 
-// If you also want /timer protected, include it.
-export const config = { matcher: ['/', '/l/:path*'] };
+export const config = { matcher: ["/", "/l/:path*"] };
