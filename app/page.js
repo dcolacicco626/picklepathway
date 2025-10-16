@@ -168,7 +168,7 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-6 py-5 flex items-center gap-4">
           <img src="/logo.png" alt="Pickle Pathway" className="h-10 w-auto rounded-lg ring-1 ring-slate-200" />
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">Pickle Pathway</h1>
+            <h1 className="text-2xl font-bold">Home Page</h1>
             <p className={`${brand.subtext} text-sm mt-1`}>
               Manage divisions, enter scores, and share the player portal.
             </p>
