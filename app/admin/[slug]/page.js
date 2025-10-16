@@ -964,7 +964,7 @@ export default function AdminLeaguePage() {
       {/* Header */}
       <div className="border-b border-slate-200 bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
-          <img src="/logo.png" alt="Pickle Pathway" className="h-10 w-auto rounded-lg ring-1 ring-slate-200" />
+          <img src="/logo.png" alt="Pickle Pathway" className="h-40 w-auto rounded-lg ring-1 ring-slate-200" />
           <div className="flex-1">
             <h1 className="text-xl font-bold">Admin</h1>
             <div className="flex flex-wrap items-center gap-3 mt-1 text-sm">
