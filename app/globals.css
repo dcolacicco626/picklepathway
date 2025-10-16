@@ -1,12 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 /* app/globals.css */
-:root {
-  --background: #ffffff;
-  --foreground: #000000;
-}
-
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-  background: var(--background);
-  color: var(--foreground);
-}
+:root { --bg: #f7fbf8; --text: #0f172a; }
+body { background: var(--bg); color: var(--text); }

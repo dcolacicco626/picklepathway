@@ -7,6 +7,10 @@ import Link from "next/link";
 import { supabase } from "../lib/supabaseClient";
 
 /* ========= Theme ========= */
+<div className="p-4 mb-4 rounded-xl bg-green-600 text-white">
+  If you see this green bar, Tailwind is working ✅
+</div>
+
 const brand = {
   bg: "bg-[#f7fbf8]",
   card: "bg-white shadow-sm rounded-2xl",
