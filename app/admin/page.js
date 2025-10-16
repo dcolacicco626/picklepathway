@@ -1,49 +1,80 @@
 // /app/admin/page.js
-export const dynamic = "force-dynamic"; // ⬅️ avoid prerendering
+export const dynamic = "force-dynamic";
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
-export default async function AdminIndexPage() {
+async function getSupabaseServer() {
   const cookieStore = cookies();
 
-  const supabase = createServerClient(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
-      // either the deprecated getAll/setAll…
       cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: () => {
-          // no-op on the server during render; Supabase may try to set refreshed cookies.
-          // That's fine—we don't need to set here.
+        // New API: get/set/remove
+        get(name) {
+          return cookieStore.get(name)?.value;
+        },
+        set() {
+          // no-op during RSC render
+        },
+        remove() {
+          // no-op during RSC render
         },
       },
-      // …or the new API (either is fine):
-      // cookies: {
-      //   get: (name) => cookieStore.get(name)?.value,
-      //   set: () => {},
-      //   remove: () => {},
-      // },
     }
   );
+}
 
-  const { data: { user } = { user: null } } = await supabase.auth.getUser();
+export default async function AdminIndexPage() {
+  // Guard: environment variables
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return (
+      <div style={{ padding: 24 }}>
+        <h1>Missing environment variables</h1>
+        <p>
+          Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
+          <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in your Vercel project (Production env).
+        </p>
+      </div>
+    );
+  }
+
+  let supabase;
+  try {
+    supabase = await getSupabaseServer();
+  } catch (e) {
+    return <div style={{ padding: 24 }}>Supabase init error: {String(e?.message || e)}</div>;
+  }
+
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user || null;
+  } catch (e) {
+    return <div style={{ padding: 24 }}>auth.getUser error: {String(e?.message || e)}</div>;
+  }
+
   if (!user) {
     return <div style={{ padding: 24 }}>Please sign in to view your organizations.</div>;
   }
 
-  const { data: rows, error } = await supabase
-    .from("memberships")
-    .select("orgs:org_id ( id, name, slug, logo_url )")
-    .eq("user_id", user.id);
+  let rows = [];
+  try {
+    const { data, error } = await supabase
+      .from("memberships")
+      .select("orgs:org_id ( id, name, slug, logo_url )")
+      .eq("user_id", user.id);
 
-  if (error) {
-    return <div style={{ padding: 24 }}>Error: {error.message}</div>;
+    if (error) throw error;
+    rows = data || [];
+  } catch (e) {
+    return <div style={{ padding: 24 }}>Query error: {String(e?.message || e)}</div>;
   }
 
-  const orgs = (rows || []).map((r) => r.orgs).filter(Boolean);
+  const orgs = rows.map((r) => r.orgs).filter(Boolean);
 
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: 24 }}>
