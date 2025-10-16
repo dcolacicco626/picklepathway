@@ -1,6 +1,7 @@
 // /app/admin/[org]/page.js
 import OrgHome from "./OrgHome";
-import { getActiveOrgId } from "@/lib/org/getActiveOrg";
+// ⬇️ use relative import instead of "@/lib/..."
+import { getActiveOrgId } from "../../../lib/org/getActiveOrg";
 
 export default async function OrgLandingPage() {
   const orgId = await getActiveOrgId();
