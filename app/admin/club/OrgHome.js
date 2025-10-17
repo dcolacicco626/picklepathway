@@ -1,2 +1,2 @@
 "use client";
-export { default } from "./[org]/OrgHome";
+export { default } from "../[org]/OrgHome";
