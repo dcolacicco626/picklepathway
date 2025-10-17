@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import { AnimatePresence, motion } from "framer-motion";
+
 
 /* ========= Theme ========= */
 const brand = {
@@ -448,193 +450,243 @@ async function switchNow() {
         </section>
       </div>
 
-      {/* ===== Admin Settings Modal ===== */}
-      {settingsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className={`${brand.card} ${brand.ring} w-full max-w-3xl p-0 overflow-hidden`}>
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
-              <div className="font-semibold">Admin Settings</div>
-              <button onClick={() => setSettingsOpen(false)} className="text-slate-500">Close</button>
-            </div>
+{/* ===== Admin Settings Modal (refined) ===== */}
+<AnimatePresence>
+  {settingsOpen && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.15 }}
+        className={`${brand.card} ${brand.ring} w-full max-w-3xl p-0 flex flex-col overflow-hidden`}
+      >
+        {/* Header */}
+        <div className="flex-none flex items-center justify-between px-5 py-3 border-b border-slate-200">
+          <div className="font-semibold">Admin Settings</div>
+          <button onClick={() => setSettingsOpen(false)} className="text-slate-500">
+            Close
+          </button>
+        </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 px-5 py-3 border-b border-slate-200">
-              {[
-                ["club", "Change Club Name"],
-                ["users", "Manage Users"],
-                ["billing", "Manage Payment"],
-                ["emails", "Email Templates"],
-                ["archived", "View Archived Leagues"],
-  ["switch", "Switch Club"],   
-              ].map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setSettingsTab(key)}
-                  className={`px-3 py-1.5 rounded-lg border text-sm ${settingsTab === key ? "bg-[#e9f7f0] border-[#0ea568] text-[#0ea568]" : "border-slate-200"}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+        {/* Tabs */}
+        <div className="flex-none border-b border-slate-200 px-5 py-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {[
+              ["club", "Change Club Name"],
+              ["users", "Manage Users"],
+              ["billing", "Manage Payment"],
+              ["emails", "Email Templates"],
+              ["archived", "View Archived Leagues"],
+              ["switch", "Switch Club"],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSettingsTab(key)}
+                className={`py-2 rounded-lg text-sm font-medium transition
+                  ${
+                    settingsTab === key
+                      ? "bg-[#e9f7f0] text-[#0ea568] border border-[#0ea568]"
+                      : "border border-slate-200 text-slate-700 hover:bg-slate-50"
+                  }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-            {/* Content */}
-            <div className="p-5 space-y-6 max-h-[70vh] overflow-auto">
-              {/* Change Club Name */}
-              {settingsTab === "club" && (
-                <form onSubmit={saveClubName} className="grid sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className={`${brand.subtext} text-sm`}>Club name</label>
-                    <input className={`w-full px-3 py-2 rounded-xl ${brand.border}`} value={clubName} onChange={(e) => setClubName(e.target.value)} />
-                    <p className="text-xs text-slate-500 mt-1">Slug: <code>{clubSlug}</code></p>
-                  </div>
-                  <div className="flex items-end">
-                    <button className={`px-4 py-2 rounded-xl ${brand.cta}`}>Save</button>
-                  </div>
-                </form>
-              )}
-
-              {/* Manage Users */}
-              {settingsTab === "users" && (
-                <div className="space-y-5">
-                  {/* Invite */}
-                  <div className="grid md:grid-cols-3 gap-3 items-end">
-                    <div className="md:col-span-1">
-                      <label className={`${brand.subtext} text-sm`}>Name (optional)</label>
-                      <input className={`w-full px-3 py-2 rounded-xl ${brand.border}`} value={inviteName} onChange={(e)=>setInviteName(e.target.value)} placeholder="Jane Admin" />
-                    </div>
-                    <div className="md:col-span-1">
-                      <label className={`${brand.subtext} text-sm`}>Email</label>
-                      <input className={`w-full px-3 py-2 rounded-xl ${brand.border}`} value={inviteEmail} onChange={(e)=>setInviteEmail(e.target.value)} placeholder="user@club.com" />
-                    </div>
-                    <div className="md:col-span-1">
-                      <label className={`${brand.subtext} text-sm`}>Role</label>
-                      <select className={`w-full px-3 py-2 rounded-xl ${brand.border}`} value={inviteRole} onChange={(e)=>setInviteRole(e.target.value)}>
-                        <option value="admin">Admin</option>
-                        <option value="sub-admin">Sub-admin</option>
-                        <option value="owner">Owner</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-3">
-                      <button onClick={inviteUser} className={`px-4 py-2 rounded-xl ${brand.cta}`}>Invite user</button>
-                    </div>
-                  </div>
-
-                  {/* Current users */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold">Current users</h4>
-                      <button onClick={loadMembers} className={`px-3 py-1.5 rounded-lg ${brand.ctaOutline}`}>Refresh</button>
-                    </div>
-                    {loadingMembers ? (
-                      <div className="text-sm text-slate-500">Loading members…</div>
-                    ) : members.length === 0 ? (
-                      <div className="text-sm text-slate-500">No users yet.</div>
-                    ) : (
-                      <div className="grid gap-2">
-                        {members.map((m) => (
-                          <div key={m.user_id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200">
-                            <div className="text-sm">
-                              <div className="font-medium">{m.email || m.user_id}</div>
-                              <div className="text-slate-500">{m.role}</div>
-                            </div>
-                            <button onClick={() => removeUser(m)} className={`px-3 py-1.5 rounded-lg ${brand.ctaOutline}`}>Remove</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6 min-h-[460px]">
+          {/* --- Change Club Name --- */}
+          {settingsTab === "club" && (
+            <form onSubmit={saveClubName} className="space-y-5">
+              <div className="grid sm:grid-cols-3 gap-3 items-end">
+                <div className="sm:col-span-2">
+                  <label className={`${brand.subtext} text-sm`}>Club name</label>
+                  <input
+                    className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+                    value={clubName}
+                    onChange={(e) => setClubName(e.target.value)}
+                  />
                 </div>
-              )}
-
-              {/* Manage Payment */}
-              {settingsTab === "billing" && (
-                <div className="space-y-1 text-sm text-slate-600">
-                  Stripe integration coming soon. Update plan and payment method here.
+                <div className="flex">
+                  <button className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}>Save</button>
                 </div>
-              )}
+              </div>
+              {settingsMsg ? <div className="text-sm text-slate-600">{settingsMsg}</div> : null}
+            </form>
+          )}
 
-              {/* Email Templates */}
-              {settingsTab === "emails" && (
-                <div className="space-y-2">
-                  <Link href="/admin/email-templates" className={`inline-block px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Open Email Templates</Link>
-                  <p className="text-sm text-slate-600">Edit copy used for previews and sends.</p>
+          {/* --- Manage Users --- */}
+          {settingsTab === "users" && (
+            <div className="space-y-6">
+              {/* Invite */}
+              <div className="grid sm:grid-cols-3 gap-3 items-end">
+                <div>
+                  <label className={`${brand.subtext} text-sm`}>Name (optional)</label>
+                  <input
+                    className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="Jane Admin"
+                  />
                 </div>
-              )}
-{/* Switch Club */}
-{settingsTab === "switch" && (
-  <div className="space-y-4">
-    <div className="text-sm text-slate-600">
-      Choose another club you belong to. You can set it as your default and/or switch immediately.
-    </div>
+                <div>
+                  <label className={`${brand.subtext} text-sm`}>Email</label>
+                  <input
+                    className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="user@club.com"
+                  />
+                </div>
+                <div>
+                  <label className={`${brand.subtext} text-sm`}>Role</label>
+                  <select
+                    className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="sub-admin">Sub-admin</option>
+                    <option value="owner">Owner</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-3">
+                  <button onClick={inviteUser} className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}>
+                    Invite user
+                  </button>
+                </div>
+              </div>
 
-    <div className="grid sm:grid-cols-3 gap-3 items-end">
-      <div className="sm:col-span-2">
-        <label className={`${brand.subtext} text-sm`}>Select club</label>
-        <select
-          className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
-          value={switchChoice}
-          onChange={(e) => setSwitchChoice(e.target.value)}
-        >
-          {orgOptions.map(o => (
-            <option key={o.id} value={o.id}>
-              {o.name} ({o.slug})
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex gap-2">
-        <button
-          onClick={saveDefaultClub}
-          disabled={savingSwitch || !switchChoice}
-          className={`px-3 py-2 rounded-xl ${brand.cta} disabled:opacity-60`}
-        >
-          {savingSwitch ? "Saving…" : "Set as default"}
-        </button>
-        <button
-          onClick={switchNow}
-          disabled={!switchChoice}
-          className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}
-        >
-          Switch now
-        </button>
-      </div>
-    </div>
-
-    {settingsMsg ? <div className="text-sm text-slate-600">{settingsMsg}</div> : null}
-  </div>
-)}
-
-
-              {/* View Archived Leagues */}
-              {settingsTab === "archived" && (
-                <div className="space-y-3">
-                  {archivedLeagues.length === 0 ? (
-                    <p className="text-sm text-slate-500">No archived leagues.</p>
-                  ) : (
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {archivedLeagues.map((l) => (
-                        <div key={l.id} className="p-4 rounded-xl border border-slate-200">
-                          <div className="flex items-center justify-between">
-                            <div className="font-semibold">{l.division || l.slug}</div>
-                            {l.start_date ? <div className={`${brand.chip} px-2 py-0.5 rounded-full text-xs`}>Started {fmtMDY(l.start_date)}</div> : null}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button onClick={() => downloadCsvForLeague(l)} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`} title="Download standings CSV (Weeks 1–6)">Download CSV</button>
-                            <a href={`/player/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Player</a>
-                            <a href={`/player/${l.slug}#subs`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Sub list</a>
-                          </div>
+              {/* Current users */}
+              <div className="border-t border-slate-200 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold">Current users</h4>
+                  <button onClick={loadMembers} className={`px-3 py-1.5 rounded-lg ${brand.ctaOutline}`}>
+                    Refresh
+                  </button>
+                </div>
+                {loadingMembers ? (
+                  <div className="text-sm text-slate-500">Loading members…</div>
+                ) : members.length === 0 ? (
+                  <div className="text-sm text-slate-500">No users yet.</div>
+                ) : (
+                  <div className="grid gap-2">
+                    {members.map((m) => (
+                      <div key={m.user_id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200">
+                        <div className="text-sm">
+                          <div className="font-medium">{m.email || m.user_id}</div>
+                          <div className="text-slate-500">{m.role}</div>
                         </div>
-                      ))}
+                        <button onClick={() => removeUser(m)} className={`px-3 py-1.5 rounded-lg ${brand.ctaOutline}`}>
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {settingsMsg ? <div className="text-sm text-slate-600">{settingsMsg}</div> : null}
+            </div>
+          )}
+
+          {/* --- Manage Payment --- */}
+          {settingsTab === "billing" && (
+            <div className="space-y-1 text-sm text-slate-600">
+              Stripe integration coming soon. Update plan and payment method here.
+            </div>
+          )}
+
+          {/* --- Email Templates --- */}
+          {settingsTab === "emails" && (
+            <div className="space-y-2">
+              <Link href="/admin/email-templates" className={`inline-block px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
+                Open Email Templates
+              </Link>
+              <p className="text-sm text-slate-600">Edit copy used for previews and sends.</p>
+            </div>
+          )}
+
+          {/* --- View Archived Leagues --- */}
+          {settingsTab === "archived" && (
+            <div className="space-y-3">
+              {archivedLeagues.length === 0 ? (
+                <p className="text-sm text-slate-500">No archived leagues.</p>
+              ) : (
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {archivedLeagues.map((l) => (
+                    <div key={l.id} className="p-4 rounded-xl border border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold">{l.division || l.slug}</div>
+                        {l.start_date ? (
+                          <div className={`${brand.chip} px-2 py-0.5 rounded-full text-xs`}>Started {fmtMDY(l.start_date)}</div>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => downloadCsvForLeague(l)}
+                          className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}
+                          title="Download standings CSV (Weeks 1–6)"
+                        >
+                          Download CSV
+                        </button>
+                        <a href={`/player/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Player</a>
+                        <a href={`/player/${l.slug}#subs`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Sub list</a>
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* --- Switch Club --- */}
+          {settingsTab === "switch" && (
+            <div className="space-y-4">
+              <div className="text-sm text-slate-600">
+                Choose another club you belong to. You can set it as your default and/or switch immediately.
+              </div>
+
+              <div className="grid sm:grid-cols-3 gap-3 items-end">
+                <div className="sm:col-span-2">
+                  <label className={`${brand.subtext} text-sm`}>Select club</label>
+                  <select
+                    className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+                    value={switchChoice}
+                    onChange={(e) => setSwitchChoice(e.target.value)}
+                  >
+                    {orgOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name} ({o.slug})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveDefaultClub}
+                    disabled={savingSwitch || !switchChoice}
+                    className={`px-3 py-2 rounded-xl ${brand.cta} disabled:opacity-60`}
+                  >
+                    {savingSwitch ? "Saving…" : "Set as default"}
+                  </button>
+                  <button onClick={switchNow} disabled={!switchChoice} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
+                    Switch now
+                  </button>
+                </div>
+              </div>
 
               {settingsMsg ? <div className="text-sm text-slate-600">{settingsMsg}</div> : null}
             </div>
-          </div>
+          )}
         </div>
-      ) : null}
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
+
     </main>
   );
 }
