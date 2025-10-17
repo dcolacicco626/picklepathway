@@ -64,6 +64,27 @@ export default function OrgHome({ orgId }) {
   const [inviteRole, setInviteRole] = useState("admin");
   const [loadingMembers, setLoadingMembers] = useState(false);
 
+// Switch Club state
+const [orgOptions, setOrgOptions] = useState([]); // [{id, name, slug}]
+const [switchChoice, setSwitchChoice] = useState("");
+const [savingSwitch, setSavingSwitch] = useState(false);
+
+const [orgData, setOrgData] = useState(null);
+
+useEffect(() => {
+  async function loadOrg() {
+    const { data, error } = await supabase
+      .from("orgs")
+      .select("id, name, slug")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (!error) setOrgData(data);
+  }
+  if (orgId) loadOrg();
+}, [orgId]);
+
+
+
   /* ===== Load org info (for settings) ===== */
   const loadOrg = useCallback(async () => {
     const { data, error } = await supabase
@@ -113,11 +134,35 @@ export default function OrgHome({ orgId }) {
     }
   }, [orgId]);
 
+const loadMyOrgs = useCallback(async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("memberships")
+      .select("orgs:org_id ( id, name, slug )")
+      .eq("user_id", user.id);
+    if (error) throw error;
+    const orgs = (data || []).map(r => r.orgs).filter(Boolean);
+    setOrgOptions(orgs);
+    // preselect: current org
+    if (orgs.length && !switchChoice) {
+      const current = orgs.find(o => o.id === orgId) || orgs[0];
+      setSwitchChoice(current.id);
+    }
+  } catch (e) {
+    console.error("loadMyOrgs failed", e);
+    setOrgOptions([]);
+  }
+}, [orgId, switchChoice]);
+
+
   useEffect(() => {
     loadOrg();
     loadLeagues();
     loadMembers();
-  }, [loadOrg, loadLeagues, loadMembers]);
+loadMyOrgs();   // 👈 add this
+}, [loadOrg, loadLeagues, loadMembers, loadMyOrgs]);
 
   const activeLeagues = useMemo(() => leagues, [leagues]);
 
@@ -270,6 +315,37 @@ export default function OrgHome({ orgId }) {
     }
   }
 
+async function saveDefaultClub() {
+  setSavingSwitch(true);
+  setSettingsMsg("");
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Please sign in again.");
+    if (!switchChoice) throw new Error("Select a club first.");
+
+    // upsert user preference
+    const { error } = await supabase
+      .from("user_prefs")
+      .upsert({ user_id: user.id, active_org_id: switchChoice });
+    if (error) throw error;
+
+    setSettingsMsg("Default club updated.");
+  } catch (e) {
+    setSettingsMsg(e?.message || String(e));
+  } finally {
+    setSavingSwitch(false);
+  }
+}
+
+async function switchNow() {
+  if (!switchChoice) return;
+  const target = orgOptions.find(o => o.id === switchChoice);
+  if (!target) return;
+  // Navigate directly to that club dashboard
+  router.replace(`/admin/${target.slug}`);
+}
+
+
   return (
     <main className={`${brand.bg} ${brand.text} min-h-screen`}>
       {/* Top bar */}
@@ -277,8 +353,11 @@ export default function OrgHome({ orgId }) {
         <div className="max-w-5xl mx-auto px-6 py-5 flex items-center gap-4">
           <img src="/logo.png" alt="Pickle Pathway" className="h-40 w-auto rounded-lg ring-1 ring-slate-200" />
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">Home Page</h1>
-            <p className={`${brand.subtext} text-sm mt-1`}>Manage leagues</p>
+           <h1 className="text-2xl font-bold">
+  {orgData?.name || "Club Dashboard"}
+</h1>
+
+        
           </div>
 
           {/* Admin Settings button */}
@@ -386,6 +465,7 @@ export default function OrgHome({ orgId }) {
                 ["billing", "Manage Payment"],
                 ["emails", "Email Templates"],
                 ["archived", "View Archived Leagues"],
+  ["switch", "Switch Club"],   
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -480,6 +560,50 @@ export default function OrgHome({ orgId }) {
                   <p className="text-sm text-slate-600">Edit copy used for previews and sends.</p>
                 </div>
               )}
+{/* Switch Club */}
+{settingsTab === "switch" && (
+  <div className="space-y-4">
+    <div className="text-sm text-slate-600">
+      Choose another club you belong to. You can set it as your default and/or switch immediately.
+    </div>
+
+    <div className="grid sm:grid-cols-3 gap-3 items-end">
+      <div className="sm:col-span-2">
+        <label className={`${brand.subtext} text-sm`}>Select club</label>
+        <select
+          className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+          value={switchChoice}
+          onChange={(e) => setSwitchChoice(e.target.value)}
+        >
+          {orgOptions.map(o => (
+            <option key={o.id} value={o.id}>
+              {o.name} ({o.slug})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={saveDefaultClub}
+          disabled={savingSwitch || !switchChoice}
+          className={`px-3 py-2 rounded-xl ${brand.cta} disabled:opacity-60`}
+        >
+          {savingSwitch ? "Saving…" : "Set as default"}
+        </button>
+        <button
+          onClick={switchNow}
+          disabled={!switchChoice}
+          className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}
+        >
+          Switch now
+        </button>
+      </div>
+    </div>
+
+    {settingsMsg ? <div className="text-sm text-slate-600">{settingsMsg}</div> : null}
+  </div>
+)}
+
 
               {/* View Archived Leagues */}
               {settingsTab === "archived" && (
