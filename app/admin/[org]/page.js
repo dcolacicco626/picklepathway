@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient"; // adjust path if needed
-import OrgHome from "./OrgHome";
+import OrgHome from "../club/OrgHome";
 
 export default function OrgLandingClient() {
   const { org: slug } = useParams(); // e.g. 'ddwm'
