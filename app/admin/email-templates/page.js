@@ -90,6 +90,25 @@ export default function EmailTemplatesPage() {
   const usingControlRef = useRef(false);
 
   /** Selection handling */
+// Add anywhere above saveTemplate (e.g., near other helpers)
+function cleanHeadingLeaks(html) {
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+  temp.querySelectorAll("h1,h2,h3,h4,h5,h6").forEach((h) => {
+    const toMove = [];
+    h.childNodes.forEach((n) => {
+      if (
+        n.nodeType === 1 &&
+        /^(P|DIV|TABLE|TBODY|TR|TD|UL|OL|LI|HR)$/i.test(n.tagName)
+      ) {
+        toMove.push(n);
+      }
+    });
+    toMove.forEach((el) => h.parentNode.insertBefore(el, h.nextSibling));
+  });
+  return temp.innerHTML;
+}
+
   function rangeIsInside(el, range) {
     if (!el || !range) return false;
     const c = range.commonAncestorContainer;
@@ -145,12 +164,13 @@ export default function EmailTemplatesPage() {
 
   async function saveTemplate() {
     setSaving(true);
+const cleanedHtml = cleanHeadingLeaks(htmlAlias);
     try {
       const payload = {
         league_id: null,
         phase,
         subject_template: canonicalize(subjectAlias),
-        html_template: canonicalize(htmlAlias),
+        html_template: canonicalize(cleanedHtml),
       };
       const { error } = await supabase
         .from("email_templates")
