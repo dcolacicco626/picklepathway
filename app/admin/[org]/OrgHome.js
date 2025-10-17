@@ -4,9 +4,7 @@ export const dynamic = "force-dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-// If you already use a path alias like "@/lib/supabaseClient", feel free to swap this import.
-// This relative path assumes the file lives at /app/admin/[org]/OrgHome.js
-import { supabase } from "../../../lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 
 /* ========= Theme ========= */
 const brand = {
@@ -21,7 +19,7 @@ const brand = {
   border: "border border-slate-200",
 };
 
-// Local date formatter (avoids UTC shift for YYYY-MM-DD)
+/* ========= Helpers ========= */
 const fmtMDY = (d) => {
   if (!d) return "";
   if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
@@ -33,72 +31,138 @@ const fmtMDY = (d) => {
   return dt.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 };
 
+function toSlug(s) {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
+}
+
+/* ========= Main Component ========= */
 export default function OrgHome({ orgId }) {
   const router = useRouter();
 
+  // ----- Create league form -----
+  const [leagueType, setLeagueType] = useState("ladder"); // only option for now
   const [divInput, setDivInput] = useState("");
   const [startDate, setStartDate] = useState("");
+
+  // ----- Data -----
   const [leagues, setLeagues] = useState([]);
+  const [archivedLeagues, setArchivedLeagues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
 
+  // ----- Settings modal -----
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState("club"); // club | users | billing | emails | archived
+  const [clubName, setClubName] = useState("");
+  const [clubSlug, setClubSlug] = useState("");
+  const [settingsMsg, setSettingsMsg] = useState("");
+
+  // Users tab
+  const [members, setMembers] = useState([]);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("admin");
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
+  /* ===== Load org info (for settings) ===== */
+  const loadOrg = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("orgs")
+      .select("id, name, slug")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (!error && data) {
+      setClubName(data.name || "");
+      setClubSlug(data.slug || "");
+    }
+  }, [orgId]);
+
+  /* ===== Load leagues (active + archived) ===== */
   const loadLeagues = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("league")
-      .select("*")
-      .eq("org_id", orgId) // 🔒 scope to active org
-      .order("created_at", { ascending: false });
-
-    if (!error) setLeagues(Array.isArray(data) ? data : []);
+    const [{ data: act }, { data: arc }] = await Promise.all([
+      supabase
+        .from("league")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("archived", false)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("league")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("archived", true)
+        .order("created_at", { ascending: false }),
+    ]);
+    setLeagues(Array.isArray(act) ? act : []);
+    setArchivedLeagues(Array.isArray(arc) ? arc : []);
     setLoading(false);
   }, [orgId]);
 
+  /* ===== Load members (via secure API) ===== */
+  const loadMembers = useCallback(async () => {
+    setLoadingMembers(true);
+    try {
+      const res = await fetch(`/api/admin/users?orgId=${orgId}`, { cache: "no-store" });
+      const json = await res.json();
+      setMembers(json?.users || []);
+    } catch {
+      setMembers([]);
+    } finally {
+      setLoadingMembers(false);
+    }
+  }, [orgId]);
+
   useEffect(() => {
+    loadOrg();
     loadLeagues();
-  }, [loadLeagues]);
+    loadMembers();
+  }, [loadOrg, loadLeagues, loadMembers]);
 
-  const activeLeagues = useMemo(() => leagues.filter((l) => !l.archived), [leagues]);
-  const archivedLeagues = useMemo(() => leagues.filter((l) => !!l.archived), [leagues]);
+  const activeLeagues = useMemo(() => leagues, [leagues]);
 
-  function toSlug(s) {
-    return s
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)+/g, "");
-  }
-
+  /* ===== Create League ===== */
   async function createLeague() {
-    const nameRaw = divInput.trim();
-    if (!nameRaw) return alert("Enter a division name");
-    const slug = toSlug(nameRaw);
-    if (!slug) return alert("Division name must contain letters or numbers");
+    const raw = divInput.trim();
+    if (!raw) return alert("Enter a league division name");
+    const slug = toSlug(raw);
+    if (!slug) return alert("League division name must contain letters or numbers");
 
     setCreating(true);
     try {
-      const { data, error } = await supabase
+      // Try inserting with optional 'kind' column; fallback if absent
+      let res = await supabase
         .from("league")
         .insert({
-          org_id: orgId, // 🔒 attach ownership
+          org_id: orgId,
           slug,
-          division: nameRaw,
+          division: raw,
           start_date: startDate || null,
-          courts_enabled: null,
           archived: false,
+          kind: leagueType,
         })
         .select("*")
         .maybeSingle();
 
-      if (error) throw error;
+      if (res.error && /column .* kind .* does not exist/i.test(res.error.message)) {
+        res = await supabase
+          .from("league")
+          .insert({
+            org_id: orgId,
+            slug,
+            division: raw,
+            start_date: startDate || null,
+            archived: false,
+          })
+          .select("*")
+          .maybeSingle();
+      }
+      if (res.error) throw res.error;
+
       setDivInput("");
       setStartDate("");
       await loadLeagues();
-
-      // Keep legacy admin flow for now (your existing /l/[slug] admin pages).
-      // Later you can move to /admin/[org]/leagues/[slug]
-      router.push(`/l/${data.slug}`);
+      router.push(`/l/${res.data.slug}`);
     } catch (e) {
       alert(e?.message || String(e));
     } finally {
@@ -106,63 +170,44 @@ export default function OrgHome({ orgId }) {
     }
   }
 
+  /* ===== Archive League ===== */
   async function archiveDivision(league) {
     const name = league.division || league.slug;
-    const ok = confirm(
-      `Archive the division "${name}"?\n\nIt will be hidden from active lists but preserved for download later.`
-    );
+    const ok = confirm(`Archive the league "${name}"?`);
     if (!ok) return;
     try {
       const { error } = await supabase.from("league").update({ archived: true }).eq("id", league.id);
       if (error) throw error;
       await loadLeagues();
-      alert("Division archived.");
+      alert("League archived.");
     } catch (e) {
-      if (String(e?.message || "").includes("archived")) {
-        alert(
-          'Your "league" table needs a boolean column "archived". Run:\n\nalter table league add column if not exists archived boolean not null default false;'
-        );
-      } else {
-        alert(e?.message || String(e));
-      }
+      alert(e?.message || String(e));
     }
   }
 
-  /* ===== CSV (standings W1–W6) ===== */
+  /* ===== CSV Export for Archived ===== */
   async function downloadCsvForLeague(league) {
     if (!league?.id) return;
     const [{ data: players }, { data: results }] = await Promise.all([
-      supabase
-        .from("players")
-        .select("*")
-        .eq("league_id", league.id)
-        .eq("org_id", orgId) // 🔒 scope to org
-        .order("created_at"),
-      supabase
-        .from("week_results")
-        .select("*")
-        .eq("league_id", league.id)
-        .eq("org_id", orgId), // 🔒 scope to org
+      supabase.from("players").select("*").eq("league_id", league.id).eq("org_id", orgId).order("created_at"),
+      supabase.from("week_results").select("*").eq("league_id", league.id).eq("org_id", orgId),
     ]);
 
     const resBy = {};
-    (results || []).forEach((r) => {
-      (resBy[r.player_id] ||= {})[r.week] = r.points;
-    });
+    (results || []).forEach((r) => ((resBy[r.player_id] ||= {})[r.week] = r.points));
 
     const rows = (players || []).map((p) => {
-      const w = [1, 2, 3, 4, 5, 6].map((i) => {
+      const weeks = [1, 2, 3, 4, 5, 6].map((i) => {
         const v = resBy[p.id]?.[i];
         return typeof v === "number" ? v : "";
       });
-      const filled = w.filter((x) => x !== "");
+      const filled = weeks.filter((x) => x !== "");
       const avg = filled.length ? (filled.reduce((a, b) => a + b, 0) / filled.length).toFixed(2) : "";
-      return [p.display_name, ...w, avg];
+      return [p.display_name, ...weeks, avg];
     });
 
     const header = ["Name", "W1", "W2", "W3", "W4", "W5", "W6", "Avg(1–6)"];
     const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
-
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -174,6 +219,57 @@ export default function OrgHome({ orgId }) {
     URL.revokeObjectURL(url);
   }
 
+  /* ===== Settings Actions ===== */
+  async function saveClubName(e) {
+    e?.preventDefault?.();
+    setSettingsMsg("");
+    try {
+      const { error } = await supabase.from("orgs").update({ name: clubName }).eq("id", orgId);
+      if (error) throw error;
+      setSettingsMsg("Club name saved.");
+    } catch (e) {
+      setSettingsMsg(e?.message || String(e));
+    }
+  }
+
+  async function inviteUser() {
+    setSettingsMsg("");
+    try {
+      if (!inviteEmail) throw new Error("Email required");
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId, email: inviteEmail, role: inviteRole, name: inviteName || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Invite failed");
+      setInviteName("");
+      setInviteEmail("");
+      setInviteRole("admin");
+      await loadMembers();
+      setSettingsMsg("Invite sent and membership created.");
+    } catch (e) {
+      setSettingsMsg(e?.message || String(e));
+    }
+  }
+
+  async function removeUser(user) {
+    setSettingsMsg("");
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId, userId: user.user_id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Remove failed");
+      await loadMembers();
+      setSettingsMsg("User removed.");
+    } catch (e) {
+      setSettingsMsg(e?.message || String(e));
+    }
+  }
+
   return (
     <main className={`${brand.bg} ${brand.text} min-h-screen`}>
       {/* Top bar */}
@@ -182,26 +278,40 @@ export default function OrgHome({ orgId }) {
           <img src="/logo.png" alt="Pickle Pathway" className="h-40 w-auto rounded-lg ring-1 ring-slate-200" />
           <div className="flex-1">
             <h1 className="text-2xl font-bold">Home Page</h1>
-            <p className={`${brand.subtext} text-sm mt-1`}>Manage divisions</p>
+            <p className={`${brand.subtext} text-sm mt-1`}>Manage leagues</p>
           </div>
 
-          <Link
-            href="/admin/email-templates"
+          {/* Admin Settings button */}
+          <button
+            onClick={() => {
+              setSettingsOpen(true);
+              setSettingsTab("club");
+            }}
             className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}
-            title="Edit email copy used for previews and sends"
+            title="Admin settings"
           >
-            Email templates
-          </Link>
+            Admin Settings
+          </button>
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto p-6 space-y-8">
-        {/* Create new division */}
+        {/* Create new league */}
         <section className={`${brand.card} ${brand.ring} p-5`}>
-          <h2 className="font-semibold text-lg mb-3">Create a new division</h2>
-          <div className="grid md:grid-cols-3 gap-3">
+          <h2 className="font-semibold text-lg mb-3">Create a new league</h2>
+
+          <div className="grid md:grid-cols-4 gap-3">
+            {/* League type */}
             <div className="flex flex-col">
-              <label className={`${brand.subtext} text-sm`}>Division name</label>
+              <label className={`${brand.subtext} text-sm`}>League type</label>
+              <select className={`px-3 py-2 rounded-xl ${brand.border}`} value={leagueType} onChange={(e) => setLeagueType(e.target.value)}>
+                <option value="ladder">Ladder League</option>
+              </select>
+            </div>
+
+            {/* League division name */}
+            <div className="flex flex-col md:col-span-2">
+              <label className={`${brand.subtext} text-sm`}>League division name</label>
               <input
                 className={`px-3 py-2 rounded-xl ${brand.border}`}
                 placeholder="e.g., Intermediate A"
@@ -209,132 +319,198 @@ export default function OrgHome({ orgId }) {
                 onChange={(e) => setDivInput(e.target.value)}
               />
             </div>
+
+            {/* Optional start date */}
             <div className="flex flex-col">
               <label className={`${brand.subtext} text-sm`}>Start date (optional)</label>
-              <input
-                type="date"
-                className={`px-3 py-2 rounded-xl ${brand.border}`}
-                value={startDate || ""}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
+              <input type="date" className={`px-3 py-2 rounded-xl ${brand.border}`} value={startDate || ""} onChange={(e) => setStartDate(e.target.value)} />
             </div>
+
             <div className="flex items-end">
-              <button
-                onClick={createLeague}
-                disabled={creating}
-                className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}
-              >
-                {creating ? "Creating…" : "Create division"}
+              <button onClick={createLeague} disabled={creating} className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}>
+                {creating ? "Creating…" : "Create league"}
               </button>
             </div>
           </div>
+
           <p className="text-xs text-slate-500 mt-2">
             The division name becomes the public URL slug automatically (e.g., <code>intermediate-a</code>).
           </p>
         </section>
 
-        {/* Active divisions */}
+        {/* Active leagues */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-lg">Active divisions</h2>
+            <h2 className="font-semibold text-lg">Active leagues</h2>
             {loading && <span className="text-sm text-slate-500">Loading…</span>}
           </div>
 
           {activeLeagues.length === 0 ? (
-            <p className="text-sm text-slate-500">No active divisions yet.</p>
+            <p className="text-sm text-slate-500">No active leagues yet.</p>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {activeLeagues.map((l) => (
                 <div key={l.id} className={`${brand.card} ${brand.ring} p-4`}>
                   <div className="flex items-center justify-between">
                     <div className="font-semibold text-slate-800">{l.division || l.slug}</div>
-                    {l.start_date ? (
-                      <div className={`${brand.chip} px-2 py-0.5 rounded-full text-xs`}>
-                        Starts {fmtMDY(l.start_date)}
-                      </div>
-                    ) : null}
+                    {l.start_date ? <div className={`${brand.chip} px-2 py-0.5 rounded-full text-xs`}>Starts {fmtMDY(l.start_date)}</div> : null}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {/* Keep legacy routes for now */}
-                    <a href={`/l/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
-                      Admin
-                    </a>
-                    <a href={`/player/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
-                      Player
-                    </a>
-                    <a href={`/subs/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
-                      Sub form
-                    </a>
-                    <a href={`/player/${l.slug}#subs`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
-                      Sub list
-                    </a>
-                    <button
-                      onClick={() => archiveDivision(l)}
-                      className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}
-                      title="Archive this division"
-                    >
-                      Archive
-                    </button>
+                    <a href={`/l/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Admin</a>
+                    <a href={`/player/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Player</a>
+                    <a href={`/subs/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Sub form</a>
+                    <a href={`/player/${l.slug}#subs`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Sub list</a>
+                    <button onClick={() => archiveDivision(l)} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`} title="Archive this league">Archive</button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </section>
+      </div>
 
-        {/* Toggle archived */}
-        <div className="pt-2">
-          <button
-            onClick={() => setShowArchived((v) => !v)}
-            className={`px-4 py-2 rounded-xl ${brand.ctaOutline}`}
-          >
-            {showArchived ? "Hide archived leagues" : "View archived leagues"}
-          </button>
-        </div>
+      {/* ===== Admin Settings Modal ===== */}
+      {settingsOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className={`${brand.card} ${brand.ring} w-full max-w-3xl p-0 overflow-hidden`}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+              <div className="font-semibold">Admin Settings</div>
+              <button onClick={() => setSettingsOpen(false)} className="text-slate-500">Close</button>
+            </div>
 
-        {/* Archived list with CSV downloads */}
-        {showArchived ? (
-          <section className={`${brand.card} ${brand.ring} p-5`}>
-            <h2 className="font-semibold text-lg mb-3">Archived leagues</h2>
-            {archivedLeagues.length === 0 ? (
-              <p className="text-sm text-slate-500">No archived leagues.</p>
-            ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {archivedLeagues.map((l) => (
-                  <div key={l.id} className="p-4 rounded-xl border border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <div className="font-semibold">{l.division || l.slug}</div>
-                      {l.start_date ? (
-                        <div className={`${brand.chip} px-2 py-0.5 rounded-full text-xs`}>
-                          Started {fmtMDY(l.start_date)}
-                        </div>
-                      ) : null}
+            {/* Tabs */}
+            <div className="flex gap-2 px-5 py-3 border-b border-slate-200">
+              {[
+                ["club", "Change Club Name"],
+                ["users", "Manage Users"],
+                ["billing", "Manage Payment"],
+                ["emails", "Email Templates"],
+                ["archived", "View Archived Leagues"],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setSettingsTab(key)}
+                  className={`px-3 py-1.5 rounded-lg border text-sm ${settingsTab === key ? "bg-[#e9f7f0] border-[#0ea568] text-[#0ea568]" : "border-slate-200"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Content */}
+            <div className="p-5 space-y-6 max-h-[70vh] overflow-auto">
+              {/* Change Club Name */}
+              {settingsTab === "club" && (
+                <form onSubmit={saveClubName} className="grid sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className={`${brand.subtext} text-sm`}>Club name</label>
+                    <input className={`w-full px-3 py-2 rounded-xl ${brand.border}`} value={clubName} onChange={(e) => setClubName(e.target.value)} />
+                    <p className="text-xs text-slate-500 mt-1">Slug: <code>{clubSlug}</code></p>
+                  </div>
+                  <div className="flex items-end">
+                    <button className={`px-4 py-2 rounded-xl ${brand.cta}`}>Save</button>
+                  </div>
+                </form>
+              )}
+
+              {/* Manage Users */}
+              {settingsTab === "users" && (
+                <div className="space-y-5">
+                  {/* Invite */}
+                  <div className="grid md:grid-cols-3 gap-3 items-end">
+                    <div className="md:col-span-1">
+                      <label className={`${brand.subtext} text-sm`}>Name (optional)</label>
+                      <input className={`w-full px-3 py-2 rounded-xl ${brand.border}`} value={inviteName} onChange={(e)=>setInviteName(e.target.value)} placeholder="Jane Admin" />
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        onClick={() => downloadCsvForLeague(l)}
-                        className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}
-                        title="Download standings CSV (Weeks 1–6)"
-                      >
-                        Download CSV
-                      </button>
-                      <a href={`/player/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
-                        Player
-                      </a>
-                      <a href={`/player/${l.slug}#subs`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
-                        Sub list
-                      </a>
+                    <div className="md:col-span-1">
+                      <label className={`${brand.subtext} text-sm`}>Email</label>
+                      <input className={`w-full px-3 py-2 rounded-xl ${brand.border}`} value={inviteEmail} onChange={(e)=>setInviteEmail(e.target.value)} placeholder="user@club.com" />
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className={`${brand.subtext} text-sm`}>Role</label>
+                      <select className={`w-full px-3 py-2 rounded-xl ${brand.border}`} value={inviteRole} onChange={(e)=>setInviteRole(e.target.value)}>
+                        <option value="admin">Admin</option>
+                        <option value="sub-admin">Sub-admin</option>
+                        <option value="owner">Owner</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-3">
+                      <button onClick={inviteUser} className={`px-4 py-2 rounded-xl ${brand.cta}`}>Invite user</button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-            <p className="text-xs text-slate-500 mt-3">
-              CSV includes player name, W1–W6 points, and average. Week 7 is handled on-site.
-            </p>
-          </section>
-        ) : null}
-      </div>
+
+                  {/* Current users */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-semibold">Current users</h4>
+                      <button onClick={loadMembers} className={`px-3 py-1.5 rounded-lg ${brand.ctaOutline}`}>Refresh</button>
+                    </div>
+                    {loadingMembers ? (
+                      <div className="text-sm text-slate-500">Loading members…</div>
+                    ) : members.length === 0 ? (
+                      <div className="text-sm text-slate-500">No users yet.</div>
+                    ) : (
+                      <div className="grid gap-2">
+                        {members.map((m) => (
+                          <div key={m.user_id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200">
+                            <div className="text-sm">
+                              <div className="font-medium">{m.email || m.user_id}</div>
+                              <div className="text-slate-500">{m.role}</div>
+                            </div>
+                            <button onClick={() => removeUser(m)} className={`px-3 py-1.5 rounded-lg ${brand.ctaOutline}`}>Remove</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Manage Payment */}
+              {settingsTab === "billing" && (
+                <div className="space-y-1 text-sm text-slate-600">
+                  Stripe integration coming soon. Update plan and payment method here.
+                </div>
+              )}
+
+              {/* Email Templates */}
+              {settingsTab === "emails" && (
+                <div className="space-y-2">
+                  <Link href="/admin/email-templates" className={`inline-block px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Open Email Templates</Link>
+                  <p className="text-sm text-slate-600">Edit copy used for previews and sends.</p>
+                </div>
+              )}
+
+              {/* View Archived Leagues */}
+              {settingsTab === "archived" && (
+                <div className="space-y-3">
+                  {archivedLeagues.length === 0 ? (
+                    <p className="text-sm text-slate-500">No archived leagues.</p>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {archivedLeagues.map((l) => (
+                        <div key={l.id} className="p-4 rounded-xl border border-slate-200">
+                          <div className="flex items-center justify-between">
+                            <div className="font-semibold">{l.division || l.slug}</div>
+                            {l.start_date ? <div className={`${brand.chip} px-2 py-0.5 rounded-full text-xs`}>Started {fmtMDY(l.start_date)}</div> : null}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button onClick={() => downloadCsvForLeague(l)} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`} title="Download standings CSV (Weeks 1–6)">Download CSV</button>
+                            <a href={`/player/${l.slug}`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Player</a>
+                            <a href={`/player/${l.slug}#subs`} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Sub list</a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {settingsMsg ? <div className="text-sm text-slate-600">{settingsMsg}</div> : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
