@@ -1,0 +1,13 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // ⬇️ This ensures API routes run as real server functions (not static)
+  output: 'standalone',
+  reactStrictMode: true,
+  experimental: {
+    serverActions: {
+      allowedOrigins: ['*'],
+    },
+  },
+};
+
+module.exports = nextConfig;

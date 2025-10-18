@@ -1,4 +1,8 @@
 // /app/api/admin/users/route.js
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient, createClient } from "@supabase/supabase-js"; // service+browser SDK
