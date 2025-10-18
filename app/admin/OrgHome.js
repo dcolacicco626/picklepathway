@@ -350,39 +350,31 @@ async function switchNow() {
 
   return (
     <main className={`${brand.bg} ${brand.text} min-h-screen`}>
-     {/* Top bar (refined) */}
+     {/* Top bar (refined, no slug line) */}
 <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
   <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
     {/* Left: Logo + name */}
     <div className="flex items-center gap-4">
       <div className="shrink-0">
-        {/* Smaller, consistent logo size */}
         <img
           src="/logo.png"
           alt="Pickle Pathway"
           className="h-12 md:h-14 w-auto rounded-lg shadow-sm ring-1 ring-slate-200 object-contain"
-
         />
       </div>
 
       <div className="leading-tight">
-        {/* Club name (always on one line when possible) */}
         <h1 className="text-xl md:text-2xl font-semibold tracking-tight">
           {orgData?.name || "Club Dashboard"}
         </h1>
-
-   
-       
-          <div className="text-sm text-slate-500">Manage leagues & settings</div>
-        )}
+        <div className="text-sm text-slate-500">
+          Manage leagues & settings
+        </div>
       </div>
     </div>
 
     {/* Right: Actions */}
     <div className="flex items-center gap-2">
-      {/* (Optional) Quick link to player view of latest league — keep for later if you want */}
-      {/* <a href="/player" className={`hidden sm:inline-flex px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Player portal</a> */}
-
       <button
         onClick={() => {
           setSettingsOpen(true);
