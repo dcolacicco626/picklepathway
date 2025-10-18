@@ -360,7 +360,7 @@ async function switchNow() {
         <img
           src="/logo.png"
           alt="Pickle Pathway"
-          className="h-15 w-auto rounded-lg shadow-sm ring-1 ring-slate-200"
+          className="h-12 md:h-14 w-auto rounded-lg shadow-sm ring-1 ring-slate-200 object-contain"
 
         />
       </div>
@@ -503,7 +503,7 @@ async function switchNow() {
               ["club", "Change Club Name"],
               ["users", "Manage Users"],
               ["billing", "Manage Payment"],
-              ["emails", "Email Templates"],
+              ["emails", "Default Email Templates"],
               ["archived", "View Archived Leagues"],
               ["switch", "Switch Club"],
             ].map(([key, label]) => (
@@ -630,9 +630,9 @@ async function switchNow() {
           {settingsTab === "emails" && (
             <div className="space-y-2">
               <Link href="/admin/email-templates" className={`inline-block px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
-                Open Email Templates
+                Ladder League Templates
               </Link>
-              <p className="text-sm text-slate-600">Edit copy used for previews and sends.</p>
+            
             </div>
           )}
 
