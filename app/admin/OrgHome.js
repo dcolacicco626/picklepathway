@@ -279,26 +279,46 @@ loadMyOrgs();   // 👈 add this
     }
   }
 
-  async function inviteUser() {
-    setSettingsMsg("");
+async function inviteUser() {
+  setSettingsMsg("");
+  try {
+    if (!inviteEmail) throw new Error("Email required");
+
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orgId,
+        email: inviteEmail.trim(),
+        role: inviteRole,
+        name: inviteName || null,
+      }),
+    });
+
+    // --- Safe JSON parse (handles empty body or HTML error) ---
+    let payload = null;
     try {
-      if (!inviteEmail) throw new Error("Email required");
-      const res = await fetch("/api/admin/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, email: inviteEmail, role: inviteRole, name: inviteName || null }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Invite failed");
-      setInviteName("");
-      setInviteEmail("");
-      setInviteRole("admin");
-      await loadMembers();
-      setSettingsMsg("Invite sent and membership created.");
-    } catch (e) {
-      setSettingsMsg(e?.message || String(e));
+      const text = await res.text();
+      payload = text ? JSON.parse(text) : {};
+    } catch {
+      payload = {};
     }
+
+    if (!res.ok) {
+      const msg = payload?.error || `Request failed (${res.status})`;
+      throw new Error(msg);
+    }
+
+    setInviteName("");
+    setInviteEmail("");
+    setInviteRole("admin");
+    await loadMembers();
+    setSettingsMsg("Invite sent and membership created.");
+  } catch (e) {
+    console.error("Invite failed:", e);
+    setSettingsMsg(e?.message || String(e));
   }
+}
 
   async function removeUser(user) {
     setSettingsMsg("");
@@ -564,7 +584,7 @@ async function switchNow() {
                   >
                     <option value="admin">Admin</option>
                     <option value="sub-admin">Sub-admin</option>
-                    <option value="owner">Owner</option>
+                  
                   </select>
                 </div>
                 <div className="sm:col-span-3">
