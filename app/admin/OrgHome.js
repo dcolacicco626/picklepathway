@@ -372,7 +372,7 @@ async function switchNow() {
         </h1>
 
    
-        ) : (
+       
           <div className="text-sm text-slate-500">Manage leagues & settings</div>
         )}
       </div>
