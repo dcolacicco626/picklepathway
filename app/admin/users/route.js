@@ -169,3 +169,23 @@ export async function DELETE(req) {
 
   return NextResponse.json({ ok: true });
 }
+// Allow preflight / method probing
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS,HEAD",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Allow": "GET,POST,DELETE,OPTIONS,HEAD",
+      "Vary": "Origin",
+    },
+  });
+}
+
+export async function HEAD() {
+  return new Response(null, {
+    status: 204,
+    headers: { "Allow": "GET,POST,DELETE,OPTIONS,HEAD" },
+  });
+}
