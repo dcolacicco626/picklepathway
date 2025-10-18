@@ -371,12 +371,7 @@ async function switchNow() {
           {orgData?.name || "Club Dashboard"}
         </h1>
 
-        {/* Optional subtext: show slug or helpful hint */}
-        {orgData?.slug ? (
-          <div className="text-sm text-slate-500">
-            <span className="align-middle">Slug:</span>{" "}
-            <code className="align-middle">{orgData.slug}</code>
-          </div>
+   
         ) : (
           <div className="text-sm text-slate-500">Manage leagues & settings</div>
         )}
