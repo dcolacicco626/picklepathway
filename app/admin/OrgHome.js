@@ -350,31 +350,58 @@ async function switchNow() {
 
   return (
     <main className={`${brand.bg} ${brand.text} min-h-screen`}>
-      {/* Top bar */}
-      <div className="border-b border-slate-200 bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center gap-4">
-          <img src="/logo.png" alt="Pickle Pathway" className="h-40 w-auto rounded-lg ring-1 ring-slate-200" />
-          <div className="flex-1">
-           <h1 className="text-2xl font-bold">
-  {orgData?.name || "Club Dashboard"}
-</h1>
+     {/* Top bar (refined) */}
+<div className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+  <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+    {/* Left: Logo + name */}
+    <div className="flex items-center gap-4">
+      <div className="shrink-0">
+        {/* Smaller, consistent logo size */}
+        <img
+          src="/logo.png"
+          alt="Pickle Pathway"
+          className="h-15 w-auto rounded-lg shadow-sm ring-1 ring-slate-200"
 
-        
-          </div>
-
-          {/* Admin Settings button */}
-          <button
-            onClick={() => {
-              setSettingsOpen(true);
-              setSettingsTab("club");
-            }}
-            className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}
-            title="Admin settings"
-          >
-            Admin Settings
-          </button>
-        </div>
+        />
       </div>
+
+      <div className="leading-tight">
+        {/* Club name (always on one line when possible) */}
+        <h1 className="text-xl md:text-2xl font-semibold tracking-tight">
+          {orgData?.name || "Club Dashboard"}
+        </h1>
+
+        {/* Optional subtext: show slug or helpful hint */}
+        {orgData?.slug ? (
+          <div className="text-sm text-slate-500">
+            <span className="align-middle">Slug:</span>{" "}
+            <code className="align-middle">{orgData.slug}</code>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-500">Manage leagues & settings</div>
+        )}
+      </div>
+    </div>
+
+    {/* Right: Actions */}
+    <div className="flex items-center gap-2">
+      {/* (Optional) Quick link to player view of latest league — keep for later if you want */}
+      {/* <a href="/player" className={`hidden sm:inline-flex px-3 py-2 rounded-xl ${brand.ctaOutline}`}>Player portal</a> */}
+
+      <button
+        onClick={() => {
+          setSettingsOpen(true);
+          setSettingsTab("club");
+        }}
+        className={`px-4 py-2 rounded-xl ${brand.ctaOutline}`}
+        title="Admin settings"
+      >
+        Admin Settings
+      </button>
+    </div>
+  </div>
+</div>
+
 
       <div className="max-w-5xl mx-auto p-6 space-y-8">
         {/* Create new league */}
