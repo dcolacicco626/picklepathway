@@ -626,85 +626,91 @@ async function switchNow() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6 min-h-[460px]">
           {/* --- Change Club Name --- */}
-          {settingsTab === "club" && (
-            <form onSubmit={saveClubName} className="space-y-5">
-              <div className="grid sm:grid-cols-3 gap-3 items-end">
-                <div className="sm:col-span-2">
-                  - <label className={`${brand.subtext} text-sm`}>Club name</label>
-<label className={`${brand.subtext} text-sm`}>Change Club Name</label>
-
-                  <input
-                    className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
-                    value={clubName}
-                    onChange={(e) => setClubName(e.target.value)}
-                  />
-                </div>
-                <div className="flex">
-                  <button className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}>Save</button>
-                </div>
-              </div>
-              {settingsMsg ? <div className="text-sm text-slate-600">{settingsMsg}</div> : null}
-            </form>
-{/* Personal details */}
-<div className="border-t border-slate-200 pt-5">
-  <h4 className="font-semibold mb-3">Personal Details</h4>
-
-  <form onSubmit={savePersonalDetails} className="space-y-4">
-    <div className="grid sm:grid-cols-3 gap-3">
-      <div className="sm:col-span-1">
-        <label className={`${brand.subtext} text-sm`}>Personal Name</label>
+{settingsTab === "club" && (
+  <div className="space-y-5">
+    {/* Club name */}
+    <form onSubmit={saveClubName} className="space-y-3">
+      <label className={`${brand.subtext} text-sm`}>Change Club Name</label>
+      <div className="grid sm:grid-cols-3 gap-3">
         <input
-          className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
-          value={personalName}
-          onChange={(e) => setPersonalName(e.target.value)}
-          placeholder="Your name"
+          className={`w-full px-3 py-2 rounded-xl ${brand.border} sm:col-span-2`}
+          value={clubName}
+          onChange={(e) => setClubName(e.target.value)}
+          placeholder="Club name"
         />
+        <button
+          disabled={savingClub}
+          className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}
+        >
+          {savingClub ? "Saving…" : "Save"}
+        </button>
       </div>
-      <div className="sm:col-span-2">
-        <label className={`${brand.subtext} text-sm`}>Personal Email</label>
-        <input
-          className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
-          value={personalEmail}
-          onChange={(e) => setPersonalEmail(e.target.value)}
-          placeholder="you@club.com"
-          type="email"
-        />
+      {settingsMsg ? (
+        <div className="text-sm text-slate-600">{settingsMsg}</div>
+      ) : null}
+    </form>
+
+    {/* Personal details */}
+    <div className="border-t border-slate-200 pt-5">
+      <h4 className="font-semibold mb-3">Personal Details</h4>
+
+      <form onSubmit={savePersonalDetails} className="space-y-4">
+        <div className="grid sm:grid-cols-3 gap-3">
+          <div className="sm:col-span-1">
+            <label className={`${brand.subtext} text-sm`}>Personal Name</label>
+            <input
+              className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+              value={personalName}
+              onChange={(e) => setPersonalName(e.target.value)}
+              placeholder="Your name"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={`${brand.subtext} text-sm`}>Personal Email</label>
+            <input
+              className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+              value={personalEmail}
+              onChange={(e) => setPersonalEmail(e.target.value)}
+              placeholder="you@club.com"
+              type="email"
+            />
+          </div>
+        </div>
+
+        <div className="flex">
+          <button
+            disabled={savingProfile}
+            className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}
+          >
+            {savingProfile ? "Saving…" : "Save personal details"}
+          </button>
+        </div>
+      </form>
+
+      {/* Password */}
+      <div className="mt-6">
+        <label className={`${brand.subtext} text-sm`}>Password</label>
+        <div className="grid sm:grid-cols-3 gap-3 items-end">
+          <input
+            className={`w-full px-3 py-2 rounded-xl ${brand.border} sm:col-span-2`}
+            value={personalPw}
+            onChange={(e) => setPersonalPw(e.target.value)}
+            placeholder="New password"
+            type="password"
+          />
+          <button
+            onClick={updatePassword}
+            disabled={savingPw}
+            className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}
+          >
+            {savingPw ? "Updating…" : "Update password"}
+          </button>
+        </div>
       </div>
-    </div>
-
-    <div className="flex">
-      <button
-        disabled={savingProfile}
-        className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}
-      >
-        {savingProfile ? "Saving…" : "Save personal details"}
-      </button>
-    </div>
-  </form>
-
-  {/* Password */}
-  <div className="mt-6">
-    <label className={`${brand.subtext} text-sm`}>Password</label>
-    <div className="grid sm:grid-cols-3 gap-3 items-end">
-      <input
-        className={`w-full px-3 py-2 rounded-xl ${brand.border} sm:col-span-2`}
-        value={personalPw}
-        onChange={(e) => setPersonalPw(e.target.value)}
-        placeholder="New password"
-        type="password"
-      />
-      <button
-        onClick={updatePassword}
-        disabled={savingPw}
-        className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}
-      >
-        {savingPw ? "Updating…" : "Update password"}
-      </button>
     </div>
   </div>
-</div>
+)}
 
-          )}
 
           {/* --- Manage Users --- */}
           {settingsTab === "users" && (
