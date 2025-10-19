@@ -36,25 +36,30 @@ function serviceClient() {
 }
 
 // ---- helpers ----
-async function requireAdminOrOwner(orgId) {
+// ---- helpers (admin / sub-admin only) ----
+async function getSessionAndRoleForOrg(orgId) {
   const supabase = authedClientFromCookies();
   const { data: { user } = { user: null } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, status: 401, msg: "Not signed in" };
+  if (!user) return { user: null, role: null, userId: null };
 
-  // must be owner or admin of this org
   const { data: rows, error } = await supabase
     .from("memberships")
     .select("role")
     .eq("org_id", orgId)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .maybeSingle();
 
-  if (error) return { ok: false, status: 500, msg: error.message };
-  const role = rows?.[0]?.role;
-  if (!role || !["owner", "admin", "manager"].includes(role)) {
-    return { ok: false, status: 403, msg: "Forbidden" };
-  }
-  return { ok: true, userId: user.id, role };
+  if (error || !rows) return { user, role: null, userId: user.id };
+  return { user, role: rows.role, userId: user.id };
 }
+
+async function requireRole(orgId, allowedRoles = []) {
+  const { user, role, userId } = await getSessionAndRoleForOrg(orgId);
+  if (!user) return { ok: false, status: 401, msg: "Not signed in" };
+  if (!allowedRoles.includes(role)) return { ok: false, status: 403, msg: "Forbidden" };
+  return { ok: true, userId, role };
+}
+
 
 // GET /api/admin/users?orgId=...
 export async function GET(req) {
@@ -62,7 +67,8 @@ export async function GET(req) {
   const orgId = searchParams.get("orgId");
   if (!orgId) return NextResponse.json({ error: "Missing orgId" }, { status: 400 });
 
-  const authz = await requireAdminOrOwner(orgId);
+const authz = await requireRole(orgId, ["admin", "sub-admin"]);
+
   if (!authz.ok) return NextResponse.json({ error: authz.msg }, { status: authz.status });
 
   // Use service role to join with auth.users to show emails
@@ -90,7 +96,8 @@ export async function GET(req) {
     role: m.role,
   }));
 
-  return NextResponse.json({ users: display });
+  return NextResponse.json({ users: display, yourRole: authz.role });
+
 }
 
 // POST /api/admin/users  { orgId, email, role, name? }
@@ -99,7 +106,8 @@ export async function POST(req) {
   const { orgId, email, role = "admin", name } = body || {};
   if (!orgId || !email) return NextResponse.json({ error: "Missing orgId or email" }, { status: 400 });
 
-  const authz = await requireAdminOrOwner(orgId);
+  const authz = await requireRole(orgId, ["admin"]);
+
   if (!authz.ok) return NextResponse.json({ error: authz.msg }, { status: authz.status });
 
   const admin = serviceClient();
@@ -143,25 +151,12 @@ export async function DELETE(req) {
   const { orgId, userId } = body || {};
   if (!orgId || !userId) return NextResponse.json({ error: "Missing orgId or userId" }, { status: 400 });
 
-  const authz = await requireAdminOrOwner(orgId);
+const authz = await requireRole(orgId, ["admin"]);
+
   if (!authz.ok) return NextResponse.json({ error: authz.msg }, { status: authz.status });
 
-  // Optional guard: don’t allow removing yourself if you’re the last owner
   const admin = serviceClient();
 
-  // Count owners
-  const { data: owners, error: ownersErr } = await admin
-    .from("memberships")
-    .select("user_id")
-    .eq("org_id", orgId)
-    .eq("role", "owner");
-  if (ownersErr) return NextResponse.json({ error: ownersErr.message }, { status: 500 });
-
-  const isSelf = authz.userId === userId;
-  const isLastOwner = (owners || []).length <= 1 && (owners || [])[0]?.user_id === userId;
-  if (isSelf && isLastOwner) {
-    return NextResponse.json({ error: "Cannot remove the last owner." }, { status: 400 });
-  }
 
   const { error: delErr } = await admin
     .from("memberships")
