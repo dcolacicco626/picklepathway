@@ -476,12 +476,27 @@ async function saveDefaultClub() {
 }
 
 async function switchNow() {
-  if (!switchChoice) return;
-  const target = orgOptions.find(o => o.id === switchChoice);
-  if (!target) return;
-  // Navigate directly to that club dashboard
-  router.replace(`/admin/${target.slug}`);
+  if (!switchChoice || switchChoice === orgId) return;
+  setSavingSwitch(true);
+  try {
+    // Persist the choice as active org so /admin loads the right one
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase
+        .from("user_prefs")
+        .upsert({ user_id: user.id, active_org_id: switchChoice });
+    }
+    // Your admin page is /admin (no slug), so route there
+    router.replace("/admin");
+    setSettingsOpen(false);
+    setSettingsMsg("Switched club.");
+  } catch (e) {
+    setSettingsMsg(e?.message || String(e));
+  } finally {
+    setSavingSwitch(false);
+  }
 }
+
 
 
   return (
@@ -909,11 +924,12 @@ async function switchNow() {
                     value={switchChoice}
                     onChange={(e) => setSwitchChoice(e.target.value)}
                   >
-                    {orgOptions.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name} ({o.slug})
-                      </option>
-                    ))}
+                {orgOptions.map((o) => (
+  <option key={o.id} value={o.id}>
+    {o.name}
+  </option>
+))}
+
                   </select>
                 </div>
                 <div className="flex gap-2">
@@ -924,9 +940,14 @@ async function switchNow() {
                   >
                     {savingSwitch ? "Saving…" : "Set as default"}
                   </button>
-                  <button onClick={switchNow} disabled={!switchChoice} className={`px-3 py-2 rounded-xl ${brand.ctaOutline}`}>
-                    Switch now
-                  </button>
+               <button
+  onClick={switchNow}
+  disabled={!switchChoice || switchChoice === orgId}
+  className={`px-3 py-2 rounded-xl ${brand.ctaOutline} disabled:opacity-60`}
+>
+  Switch now
+</button>
+
                 </div>
               </div>
 
