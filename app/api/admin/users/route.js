@@ -1,18 +1,18 @@
 // /app/api/admin/users/route.js
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createClient } from "@supabase/supabase-js";   // for SERVICE ROLE client only
-import { createServerClient } from "@supabase/ssr";     // for reading the session from cookies
-
+import { createClient } from "@supabase/supabase-js";   // service-role / bearer-bound client
+import { createServerClient } from "@supabase/ssr";     // cookie-based SSR client
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE; // <-- server-only!
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
 
+// --- Cookie (SSR) client: lets the route read sb-* cookies if present ---
 function authedClientFromCookies() {
   const cookieStore = cookies();
   return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -20,27 +20,34 @@ function authedClientFromCookies() {
       get(name) {
         return cookieStore.get(name)?.value;
       },
-      set() {
-        // no-op in a route handler; we only need to read
-      },
-      remove() {
-        // no-op
-      },
+      set() {},     // no-op in route handlers
+      remove() {},  // no-op
     },
   });
 }
 
-
+// --- Service-role client: for privileged DB/admin ops (after authZ) ---
 function serviceClient() {
-  // This client performs privileged actions after we authorize the caller.
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
     auth: { persistSession: false },
   });
 }
 
-// ---- helpers ----
+// --- Request-bound client: prefer Authorization Bearer; fallback to cookies ---
+function authedClientFromRequest(req) {
+  const authHeader = req.headers.get("authorization") || "";
+  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (bearer) {
+    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, detectSessionInUrl: false },
+      global: { headers: { Authorization: `Bearer ${bearer}` } },
+    });
+  }
+  return authedClientFromCookies();
+}
+
 // ---- helpers (admin / sub-admin only) ----
-// NEW: pass the supabase client in
 async function getSessionAndRoleForOrg(supabase, orgId) {
   const { data: { user } = { user: null } } = await supabase.auth.getUser();
   if (!user) return { user: null, role: null, userId: null };
@@ -63,6 +70,7 @@ async function requireRole(supabase, orgId, allowedRoles = []) {
   return { ok: true, userId, role };
 }
 
+// --------------------- HANDLERS ----------------------
 
 // GET /api/admin/users?orgId=...
 export async function GET(req) {
@@ -70,10 +78,8 @@ export async function GET(req) {
   const orgId = searchParams.get("orgId");
   if (!orgId) return NextResponse.json({ error: "Missing orgId" }, { status: 400 });
 
-const supabaseAuth = authedClientFromRequest(req);
-const supabaseAuth = authedClientFromRequest(req);
-const authz = await requireRole(supabaseAuth, orgId, ["admin"]);
-
+  const supabaseAuth = authedClientFromRequest(req);
+  const authz = await requireRole(supabaseAuth, orgId, ["admin", "sub-admin"]);
   if (!authz.ok) return NextResponse.json({ error: authz.msg }, { status: authz.status });
 
   // Use service role to join with auth.users to show emails
@@ -84,17 +90,16 @@ const authz = await requireRole(supabaseAuth, orgId, ["admin"]);
     .from("memberships")
     .select("user_id, role")
     .eq("org_id", orgId);
-
   if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
-
-  if (!mems?.length) return NextResponse.json({ users: [] });
+  if (!mems?.length) return NextResponse.json({ users: [], yourRole: authz.role });
 
   // 2) fetch emails from auth.users
-  const ids = mems.map((m) => m.user_id);
-  const { data: users, error: userErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 2000 });
+  const { data: usersList, error: userErr } = await admin.auth.admin.listUsers({
+    page: 1, perPage: 2000,
+  });
   if (userErr) return NextResponse.json({ error: userErr.message }, { status: 500 });
 
-  const emailById = new Map(users.users.map((u) => [u.id, u.email]));
+  const emailById = new Map(usersList.users.map((u) => [u.id, u.email]));
   const display = mems.map((m) => ({
     user_id: m.user_id,
     email: emailById.get(m.user_id) || "(unknown)",
@@ -102,7 +107,6 @@ const authz = await requireRole(supabaseAuth, orgId, ["admin"]);
   }));
 
   return NextResponse.json({ users: display, yourRole: authz.role });
-
 }
 
 // POST /api/admin/users  { orgId, email, role, name? }
@@ -111,42 +115,25 @@ export async function POST(req) {
   const { orgId, email, role = "admin", name } = body || {};
   if (!orgId || !email) return NextResponse.json({ error: "Missing orgId or email" }, { status: 400 });
 
-  const authz = await requireRole(orgId, ["admin"]);
-
+  const supabaseAuth = authedClientFromRequest(req);
+  const authz = await requireRole(supabaseAuth, orgId, ["admin"]);
   if (!authz.ok) return NextResponse.json({ error: authz.msg }, { status: authz.status });
 
   const admin = serviceClient();
 
-// Accept session from either Authorization header (Bearer) or cookies (SSR fallback)
-function authedClientFromRequest(req) {
-  const authHeader = req.headers.get("authorization") || "";
-  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-
-  if (bearer) {
-    // Client tied to the caller's access token
-    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false, detectSessionInUrl: false },
-      global: { headers: { Authorization: `Bearer ${bearer}` } },
-    });
-  }
-
-  // Fallback to cookie-based SSR client
-  return authedClientFromCookies();
-}
-
-
-
   // 1) find or create user by email (send invite email)
   let userId = null;
 
-  // try to find existing user first
   const { data: all, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 2000 });
   if (listErr) return NextResponse.json({ error: listErr.message }, { status: 500 });
-  const existing = all.users.find((u) => (u.email || "").toLowerCase() === email.toLowerCase());
+
+  const existing = all.users.find(
+    (u) => (u.email || "").toLowerCase() === email.toLowerCase()
+  );
+
   if (existing) {
     userId = existing.id;
   } else {
-    // invite (they’ll set password via email)
     const { data: invited, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || ""}/login`,
     });
@@ -162,6 +149,7 @@ function authedClientFromRequest(req) {
     .insert({ user_id: userId, org_id: orgId, role })
     .select("*")
     .maybeSingle();
+
   if (memErr && !String(memErr.message).includes("duplicate")) {
     return NextResponse.json({ error: memErr.message }, { status: 500 });
   }
@@ -175,24 +163,22 @@ export async function DELETE(req) {
   const { orgId, userId } = body || {};
   if (!orgId || !userId) return NextResponse.json({ error: "Missing orgId or userId" }, { status: 400 });
 
-const supabaseAuth = authedClientFromRequest(req);
-const authz = await requireRole(supabaseAuth, orgId, ["admin"]);
-
+  const supabaseAuth = authedClientFromRequest(req);
+  const authz = await requireRole(supabaseAuth, orgId, ["admin"]);
   if (!authz.ok) return NextResponse.json({ error: authz.msg }, { status: authz.status });
 
   const admin = serviceClient();
-
 
   const { error: delErr } = await admin
     .from("memberships")
     .delete()
     .eq("org_id", orgId)
     .eq("user_id", userId);
-
   if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });
 }
+
 // Allow preflight / method probing
 export async function OPTIONS() {
   return new Response(null, {
@@ -201,8 +187,8 @@ export async function OPTIONS() {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS,HEAD",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Allow": "GET,POST,DELETE,OPTIONS,HEAD",
-      "Vary": "Origin",
+      Allow: "GET,POST,DELETE,OPTIONS,HEAD",
+      Vary: "Origin",
     },
   });
 }
@@ -210,6 +196,7 @@ export async function OPTIONS() {
 export async function HEAD() {
   return new Response(null, {
     status: 204,
-    headers: { "Allow": "GET,POST,DELETE,OPTIONS,HEAD" },
+    headers: { Allow: "GET,POST,DELETE,OPTIONS,HEAD" },
   });
 }
+
