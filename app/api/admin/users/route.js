@@ -198,6 +198,17 @@ export async function POST(req) {
   if (!userId) {
     return NextResponse.json({ error: "Could not create or find user" }, { status: 500 });
   }
+// If a display name was supplied, store it on the auth user for future reads
+if (name) {
+  try {
+    await admin.auth.admin.updateUserById(userId, {
+      user_metadata: { full_name: name },
+    });
+  } catch (e) {
+    // non-fatal: metadata write failed
+  }
+}
+
 
   // 2) Upsert membership
   const { error: memErr } = await admin

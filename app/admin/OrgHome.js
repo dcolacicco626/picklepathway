@@ -67,12 +67,14 @@ export default function OrgHome({ orgId }) {
   const [loadingMembers, setLoadingMembers] = useState(false);
 
 // Switch Club state
-const [orgOptions, setOrgOptions] = useState([]); // [{id, name, slug}]
+const [orgOptions, setOrgOptions] = useState([]); // [{id, name}]
 const [switchChoice, setSwitchChoice] = useState("");
 const [savingSwitch, setSavingSwitch] = useState(false);
 
 const [orgData, setOrgData] = useState(null);
 const [myUserId, setMyUserId] = useState(null);
+const [backupInviteUrl, setBackupInviteUrl] = useState("");
+
 
 
 async function authHeaders() {
@@ -613,6 +615,21 @@ async function switchNow() {
                   </button>
                 </div>
               </div>
+{backupInviteUrl ? (
+  <div className="sm:col-span-3 mt-2 text-sm">
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(backupInviteUrl);
+        setSettingsMsg("Invite link copied to clipboard.");
+      }}
+      className={`px-3 py-1.5 rounded-lg ${brand.ctaOutline}`}
+    >
+      Copy invite link
+    </button>
+    <span className="ml-2 text-slate-500 break-all">{backupInviteUrl}</span>
+  </div>
+) : null}
+
 
               {/* Current users */}
               <div className="border-t border-slate-200 pt-4">
@@ -633,13 +650,12 @@ async function switchNow() {
     key={m.user_id}
     className="flex items-center justify-between p-3 rounded-xl border border-slate-200"
   >
-    <div className="text-sm">
-      <div className="font-medium">{m.name ? m.name : m.email || m.user_id}</div>
-      {m.name ? (
-        <div className="text-slate-500">{m.email}</div>
-      ) : null}
-      <div className="text-slate-500 text-xs mt-1">{m.role}</div>
-    </div>
+<div className="text-sm">
+  <div className="font-medium">{m.name || "(no name yet)"}</div>
+  <div className="text-slate-500">{m.email}</div>
+  <div className="text-slate-500 text-xs mt-1">{m.role}</div>
+</div>
+
 
     {m.user_id !== myUserId ? (
       <button
