@@ -81,6 +81,9 @@ const [personalEmail, setPersonalEmail] = useState("");
 const [personalPw, setPersonalPw] = useState("");
 const [savingProfile, setSavingProfile] = useState(false);
 const [savingPw, setSavingPw] = useState(false);
+// Club name saving toggle (needed by the Save button in the Club tab)
+const [savingClub, setSavingClub] = useState(false);
+
 
 
 
@@ -124,6 +127,10 @@ useEffect(() => {
     setPersonalEmail(user.email || "");
   })();
 }, []);
+useEffect(() => {
+  if (orgData?.name) setClubName(orgData.name);
+}, [orgData?.name]);
+
 
 
 
@@ -312,17 +319,33 @@ loadMyOrgs();   // 👈 add this
   }
 
   /* ===== Settings Actions ===== */
-  async function saveClubName(e) {
-    e?.preventDefault?.();
-    setSettingsMsg("");
-    try {
-      const { error } = await supabase.from("orgs").update({ name: clubName }).eq("id", orgId);
-      if (error) throw error;
-      setSettingsMsg("Club name saved.");
-    } catch (e) {
-      setSettingsMsg(e?.message || String(e));
-    }
+async function saveClubName(e) {
+  e?.preventDefault?.();
+  setSettingsMsg("");
+  setSavingClub(true);
+  try {
+    if (!clubName?.trim()) throw new Error("Please enter a club name.");
+    // Update in your DB (example using your existing admin endpoint)
+    const res = await fetch("/api/admin/org", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(await authHeaders()),
+      },
+      body: JSON.stringify({ orgId, name: clubName.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Failed to save club name");
+    setSettingsMsg("Club name saved.");
+    // Optional: refresh local org data if you have a loader
+    if (typeof loadOrg === "function") await loadOrg();
+  } catch (e) {
+    setSettingsMsg(e?.message || String(e));
+  } finally {
+    setSavingClub(false);
   }
+}
+
 
 async function savePersonalDetails(e) {
   e?.preventDefault?.();
