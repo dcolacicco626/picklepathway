@@ -1,41 +1,47 @@
 // /middleware.js
 import { NextResponse } from "next/server";
 
-// Only evaluate middleware on /admin; keep /, /l/*, and all /api/* untouched.
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/((?!api/).*)"], // runs everywhere except /api/*
 };
 
 export function middleware(req) {
-  // Double-guard: never intercept API calls
-  if (req.nextUrl.pathname.startsWith("/api/")) {
-    return NextResponse.next();
+  const url = req.nextUrl;
+  const host = req.headers.get("host") || "";
+
+  // --- 1) Force www in production ---
+  const isProd = (process.env.VERCEL_ENV || process.env.NODE_ENV) === "production";
+  const isVercelPreview = host.endsWith(".vercel.app");
+  const isLocalhost = host.startsWith("localhost:");
+  const onApex = host === "picklepathway.com";
+
+  if (isProd && !isVercelPreview && !isLocalhost && onApex) {
+    url.hostname = "www.picklepathway.com";
+    return NextResponse.redirect(url, 308);
   }
 
-  // In production: do not use Basic Auth. Let your app's Supabase auth handle /admin.
-  const env = process.env.VERCEL_ENV || process.env.NODE_ENV;
-  const isPreview = env !== "production";
-  if (!isPreview) {
-    return NextResponse.next();
-  }
-
-  // In preview/dev: optional Basic Auth to keep the admin area private
-  const header = req.headers.get("authorization") || "";
-  const [type, creds] = header.split(" ");
-  let user = "", pass = "";
-  if (type === "Basic" && creds) {
-    try {
-      const decoded =
-        typeof atob === "function" ? atob(creds) : Buffer.from(creds, "base64").toString("utf8");
-      [user, pass] = decoded.split(":");
-    } catch {}
-  }
-  const ok = user === "admin" && !!process.env.ADMIN_PASSWORD && pass === process.env.ADMIN_PASSWORD;
-  if (!ok) {
-    return new NextResponse("Unauthorized", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="Admin (preview only)"' },
-    });
+  // --- 2) Optional: Basic Auth for /admin in preview/dev ---
+  if (url.pathname.startsWith("/admin")) {
+    const isPreview = !isProd;
+    if (isPreview) {
+      const header = req.headers.get("authorization") || "";
+      const [type, creds] = header.split(" ");
+      let user = "", pass = "";
+      if (type === "Basic" && creds) {
+        try {
+          const decoded =
+            typeof atob === "function" ? atob(creds) : Buffer.from(creds, "base64").toString("utf8");
+          [user, pass] = decoded.split(":");
+        } catch {}
+      }
+      const ok = user === "admin" && !!process.env.ADMIN_PASSWORD && pass === process.env.ADMIN_PASSWORD;
+      if (!ok) {
+        return new NextResponse("Unauthorized", {
+          status: 401,
+          headers: { "WWW-Authenticate": 'Basic realm="Admin (preview only)"' },
+        });
+      }
+    }
   }
 
   return NextResponse.next();
