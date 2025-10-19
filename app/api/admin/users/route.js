@@ -6,6 +6,8 @@ export const revalidate = 0;
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient, createClient } from "@supabase/supabase-js"; // service+browser SDK
+import { createServerClient } from "@supabase/ssr";
+
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -13,20 +15,21 @@ const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE; // <-- server-o
 
 function authedClientFromCookies() {
   const cookieStore = cookies();
-  // This client reads the caller’s session (for authz check). No service role here.
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { "X-Client-Info": "pp-admin-users-api" } },
-    auth: {
-      persistSession: false,
-      detectSessionInUrl: false,
-      storage: {
-        getItem: (key) => cookieStore.get(key)?.value ?? null,
-        setItem: () => {},
-        removeItem: () => {},
+  return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: {
+      get(name) {
+        return cookieStore.get(name)?.value;
+      },
+      set() {
+        // no-op in a route handler; we only need to read
+      },
+      remove() {
+        // no-op
       },
     },
   });
 }
+
 
 function serviceClient() {
   // This client performs privileged actions after we authorize the caller.
