@@ -47,6 +47,7 @@ function authedClientFromRequest(req) {
   return authedClientFromCookies();
 }
 
+
 // ---- helpers (admin / sub-admin only) ----
 async function getSessionAndRoleForOrg(supabase, orgId) {
   const { data: { user } = { user: null } } = await supabase.auth.getUser();
@@ -99,14 +100,36 @@ export async function GET(req) {
   });
   if (userErr) return NextResponse.json({ error: userErr.message }, { status: 500 });
 
-  const emailById = new Map(usersList.users.map((u) => [u.id, u.email]));
-  const display = mems.map((m) => ({
-    user_id: m.user_id,
-    email: emailById.get(m.user_id) || "(unknown)",
-    role: m.role,
-  }));
+// Map both email and metadata for name
+const byId = new Map(
+  usersList.users.map((u) => [
+    u.id,
+    {
+      email: u.email,
+      meta: u.user_metadata || {},
+    },
+  ])
+);
 
-  return NextResponse.json({ users: display, yourRole: authz.role });
+const display = mems.map((m) => {
+  const entry = byId.get(m.user_id) || { email: "(unknown)", meta: {} };
+  // Try multiple common keys for a display name
+  const name =
+    entry.meta.full_name ||
+    entry.meta.name ||
+    entry.meta.display_name ||
+    null;
+
+  return {
+    user_id: m.user_id,
+    email: entry.email || "(unknown)",
+    name,
+    role: m.role,
+  };
+});
+
+return NextResponse.json({ users: display, yourRole: authz.role });
+
 }
 
 // POST /api/admin/users  { orgId, email, role, name? }

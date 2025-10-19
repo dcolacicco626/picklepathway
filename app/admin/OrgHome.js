@@ -72,12 +72,21 @@ const [switchChoice, setSwitchChoice] = useState("");
 const [savingSwitch, setSavingSwitch] = useState(false);
 
 const [orgData, setOrgData] = useState(null);
+const [myUserId, setMyUserId] = useState(null);
+
 
 async function authHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
+useEffect(() => {
+  (async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    setMyUserId(user?.id || null);
+  })();
+}, []);
+
 
 
 useEffect(() => {
@@ -297,7 +306,7 @@ async function inviteUser() {
 
     const headers = {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session?.access_token || ""}`,
+      ...(await authHeaders()),
     };
 
     const body = JSON.stringify({
@@ -328,6 +337,25 @@ async function inviteUser() {
     setSettingsMsg(e?.message || String(e));
   }
 }
+async function removeUser(userId) {
+  setSettingsMsg("");
+  try {
+    const res = await fetch("/api/admin/users", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...(await authHeaders()),
+      },
+      body: JSON.stringify({ orgId, userId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Remove failed");
+    await loadMembers();
+  } catch (e) {
+    setSettingsMsg(e?.message || String(e));
+  }
+}
+
 
 async function saveDefaultClub() {
   setSavingSwitch(true);
@@ -600,17 +628,38 @@ async function switchNow() {
                   <div className="text-sm text-slate-500">No users yet.</div>
                 ) : (
                   <div className="grid gap-2">
-                    {members.map((m) => (
-                      <div key={m.user_id} className="flex items-center justify-between p-3 rounded-xl border border-slate-200">
-                        <div className="text-sm">
-                          <div className="font-medium">{m.email || m.user_id}</div>
-                          <div className="text-slate-500">{m.role}</div>
-                        </div>
-                        <button onClick={() => removeUser(m)} className={`px-3 py-1.5 rounded-lg ${brand.ctaOutline}`}>
-                          Remove
-                        </button>
-                      </div>
-                    ))}
+       {members.map((m) => (
+  <div
+    key={m.user_id}
+    className="flex items-center justify-between p-3 rounded-xl border border-slate-200"
+  >
+    <div className="text-sm">
+      <div className="font-medium">{m.name ? m.name : m.email || m.user_id}</div>
+      {m.name ? (
+        <div className="text-slate-500">{m.email}</div>
+      ) : null}
+      <div className="text-slate-500 text-xs mt-1">{m.role}</div>
+    </div>
+
+    {m.user_id !== myUserId ? (
+      <button
+        onClick={() => removeUser(m.user_id)}
+        className={`px-3 py-1.5 rounded-lg ${brand.ctaOutline}`}
+      >
+        Remove
+      </button>
+    ) : (
+      <button
+        disabled
+        title="You can't remove yourself"
+        className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-400 cursor-not-allowed"
+      >
+        Remove
+      </button>
+    )}
+  </div>
+))}
+
                   </div>
                 )}
               </div>
