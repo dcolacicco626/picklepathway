@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import Image from "next/image";
-import Nav from "./components/Nav";
+
 
 // Optional: App Router supports metadata per page.
 // If you already set this in layout.js, you can remove this block.

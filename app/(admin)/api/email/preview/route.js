@@ -4,8 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fetchTemplate, renderTemplate } from "../../../../lib/emailRenderer";
-
+import { supabase } from "@/lib/supabaseClient";
 /* ------------- Date helpers (UTC-safe for labels) ------------- */
 function addDaysISO(iso, days) {
   if (!iso) return null;
