@@ -22,7 +22,7 @@ export default function ContactPage() {
           Email Support
         </a>
         <p className="text-xs text-slate-500 mt-6">
-          Prefer a call? <Link href=\"/contact#schedule\" className=\"underline\">Schedule a demo</Link>.
+         Prefer a call? <Link href="/contact#schedule" className="underline">Schedule a demo</Link>.
         </p>
       </section>
     </main>
