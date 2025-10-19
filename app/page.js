@@ -78,17 +78,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Logos / social proof */}
-      <section className="max-w-6xl mx-auto px-5 pb-6">
-        <div className="text-center text-sm text-slate-500">Trusted by growing pickleball clubs</div>
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 opacity-80">
-          {/* Swap these placeholders with real partner logos */}
-          <div className="bg-white/60 rounded-xl ring-1 ring-slate-200 h-14" />
-          <div className="bg-white/60 rounded-xl ring-1 ring-slate-200 h-14" />
-          <div className="bg-white/60 rounded-xl ring-1 ring-slate-200 h-14" />
-          <div className="bg-white/60 rounded-xl ring-1 ring-slate-200 h-14" />
-        </div>
-      </section>
+
 
       {/* Feature grid */}
       <section id="features" className="max-w-6xl mx-auto px-5 py-12 grid md:grid-cols-3 gap-6">
