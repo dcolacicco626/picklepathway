@@ -73,6 +73,13 @@ const [savingSwitch, setSavingSwitch] = useState(false);
 
 const [orgData, setOrgData] = useState(null);
 
+async function authHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+
 useEffect(() => {
   async function loadOrg() {
     const { data, error } = await supabase
@@ -126,7 +133,11 @@ useEffect(() => {
   const loadMembers = useCallback(async () => {
     setLoadingMembers(true);
     try {
-      const res = await fetch(`/api/admin/users?orgId=${orgId}`, { cache: "no-store" });
+    const res = await fetch(`/api/admin/users?orgId=${orgId}`, {
+  cache: "no-store",
+  headers: await authHeaders(),
+});
+
       const json = await res.json();
       setMembers(json?.users || []);
     } catch {
@@ -284,16 +295,12 @@ async function inviteUser() {
   try {
     if (!inviteEmail) throw new Error("Email required");
 
-    const res = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orgId,
-        email: inviteEmail.trim(),
-        role: inviteRole,
-        name: inviteName || null,
-      }),
-    });
+const res = await fetch("/api/admin/users", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+  body: JSON.stringify({ orgId, email: inviteEmail.trim(), role: inviteRole, name: inviteName || null }),
+});
+
 
     // --- Safe JSON parse (handles empty body or HTML error) ---
     let payload = null;
@@ -323,11 +330,12 @@ async function inviteUser() {
   async function removeUser(user) {
     setSettingsMsg("");
     try {
-      const res = await fetch("/api/admin/users", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, userId: user.user_id }),
-      });
+ const res = await fetch("/api/admin/users", {
+  method: "DELETE",
+  headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+  body: JSON.stringify({ orgId, userId: user.user_id }),
+});
+
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Remove failed");
       await loadMembers();

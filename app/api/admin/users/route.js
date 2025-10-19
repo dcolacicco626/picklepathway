@@ -40,24 +40,24 @@ function serviceClient() {
 
 // ---- helpers ----
 // ---- helpers (admin / sub-admin only) ----
-async function getSessionAndRoleForOrg(orgId) {
-  const supabase = authedClientFromCookies();
+// NEW: pass the supabase client in
+async function getSessionAndRoleForOrg(supabase, orgId) {
   const { data: { user } = { user: null } } = await supabase.auth.getUser();
   if (!user) return { user: null, role: null, userId: null };
 
-  const { data: rows, error } = await supabase
+  const { data: row, error } = await supabase
     .from("memberships")
     .select("role")
     .eq("org_id", orgId)
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (error || !rows) return { user, role: null, userId: user.id };
-  return { user, role: rows.role, userId: user.id };
+  if (error || !row) return { user, role: null, userId: user.id };
+  return { user, role: row.role, userId: user.id };
 }
 
-async function requireRole(orgId, allowedRoles = []) {
-  const { user, role, userId } = await getSessionAndRoleForOrg(orgId);
+async function requireRole(supabase, orgId, allowedRoles = []) {
+  const { user, role, userId } = await getSessionAndRoleForOrg(supabase, orgId);
   if (!user) return { ok: false, status: 401, msg: "Not signed in" };
   if (!allowedRoles.includes(role)) return { ok: false, status: 403, msg: "Forbidden" };
   return { ok: true, userId, role };
@@ -70,7 +70,9 @@ export async function GET(req) {
   const orgId = searchParams.get("orgId");
   if (!orgId) return NextResponse.json({ error: "Missing orgId" }, { status: 400 });
 
-const authz = await requireRole(orgId, ["admin", "sub-admin"]);
+const supabaseAuth = authedClientFromRequest(req);
+const supabaseAuth = authedClientFromRequest(req);
+const authz = await requireRole(supabaseAuth, orgId, ["admin"]);
 
   if (!authz.ok) return NextResponse.json({ error: authz.msg }, { status: authz.status });
 
@@ -115,6 +117,25 @@ export async function POST(req) {
 
   const admin = serviceClient();
 
+// Accept session from either Authorization header (Bearer) or cookies (SSR fallback)
+function authedClientFromRequest(req) {
+  const authHeader = req.headers.get("authorization") || "";
+  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (bearer) {
+    // Client tied to the caller's access token
+    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, detectSessionInUrl: false },
+      global: { headers: { Authorization: `Bearer ${bearer}` } },
+    });
+  }
+
+  // Fallback to cookie-based SSR client
+  return authedClientFromCookies();
+}
+
+
+
   // 1) find or create user by email (send invite email)
   let userId = null;
 
@@ -154,7 +175,8 @@ export async function DELETE(req) {
   const { orgId, userId } = body || {};
   if (!orgId || !userId) return NextResponse.json({ error: "Missing orgId or userId" }, { status: 400 });
 
-const authz = await requireRole(orgId, ["admin"]);
+const supabaseAuth = authedClientFromRequest(req);
+const authz = await requireRole(supabaseAuth, orgId, ["admin"]);
 
   if (!authz.ok) return NextResponse.json({ error: authz.msg }, { status: authz.status });
 
