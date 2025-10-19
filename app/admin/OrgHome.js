@@ -75,6 +75,14 @@ const [orgData, setOrgData] = useState(null);
 const [myUserId, setMyUserId] = useState(null);
 const [backupInviteUrl, setBackupInviteUrl] = useState("");
 
+// Personal (account) details state
+const [personalName, setPersonalName] = useState("");
+const [personalEmail, setPersonalEmail] = useState("");
+const [personalPw, setPersonalPw] = useState("");
+const [savingProfile, setSavingProfile] = useState(false);
+const [savingPw, setSavingPw] = useState(false);
+
+
 
 
 async function authHeaders() {
@@ -102,6 +110,21 @@ useEffect(() => {
   }
   if (orgId) loadOrg();
 }, [orgId]);
+
+useEffect(() => {
+  (async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setPersonalName(
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.user_metadata?.display_name ||
+      ""
+    );
+    setPersonalEmail(user.email || "");
+  })();
+}, []);
+
 
 
 
@@ -300,6 +323,54 @@ loadMyOrgs();   // 👈 add this
       setSettingsMsg(e?.message || String(e));
     }
   }
+
+async function savePersonalDetails(e) {
+  e?.preventDefault?.();
+  setSettingsMsg("");
+  setSavingProfile(true);
+  try {
+    const updates = {
+      data: { full_name: personalName || null },
+    };
+    // Update email if it changed
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Please sign in again.");
+    if (personalEmail && personalEmail !== user.email) {
+      updates.email = personalEmail;
+    }
+    const { error } = await supabase.auth.updateUser(updates);
+    if (error) throw error;
+
+    setSettingsMsg(
+      updates.email
+        ? "Personal details saved. If you changed email, please check your inbox to confirm."
+        : "Personal details saved."
+    );
+  } catch (e) {
+    setSettingsMsg(e?.message || String(e));
+  } finally {
+    setSavingProfile(false);
+  }
+}
+
+async function updatePassword(e) {
+  e?.preventDefault?.();
+  setSettingsMsg("");
+  setSavingPw(true);
+  try {
+    if (!personalPw || personalPw.length < 6)
+      throw new Error("Password must be at least 6 characters.");
+    const { error } = await supabase.auth.updateUser({ password: personalPw });
+    if (error) throw error;
+    setPersonalPw("");
+    setSettingsMsg("Password updated.");
+  } catch (e) {
+    setSettingsMsg(e?.message || String(e));
+  } finally {
+    setSavingPw(false);
+  }
+}
+
 
 async function inviteUser() {
   setSettingsMsg("");
@@ -529,7 +600,7 @@ async function switchNow() {
         <div className="flex-none border-b border-slate-200 px-5 py-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {[
-              ["club", "Change Club Name"],
+              ["club", "Club & Personal Details"],
               ["users", "Manage Users"],
               ["billing", "Manage Payment"],
               ["emails", "Default Email Templates"],
@@ -559,7 +630,9 @@ async function switchNow() {
             <form onSubmit={saveClubName} className="space-y-5">
               <div className="grid sm:grid-cols-3 gap-3 items-end">
                 <div className="sm:col-span-2">
-                  <label className={`${brand.subtext} text-sm`}>Club name</label>
+                  - <label className={`${brand.subtext} text-sm`}>Club name</label>
+<label className={`${brand.subtext} text-sm`}>Change Club Name</label>
+
                   <input
                     className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
                     value={clubName}
@@ -572,6 +645,65 @@ async function switchNow() {
               </div>
               {settingsMsg ? <div className="text-sm text-slate-600">{settingsMsg}</div> : null}
             </form>
+{/* Personal details */}
+<div className="border-t border-slate-200 pt-5">
+  <h4 className="font-semibold mb-3">Personal Details</h4>
+
+  <form onSubmit={savePersonalDetails} className="space-y-4">
+    <div className="grid sm:grid-cols-3 gap-3">
+      <div className="sm:col-span-1">
+        <label className={`${brand.subtext} text-sm`}>Personal Name</label>
+        <input
+          className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+          value={personalName}
+          onChange={(e) => setPersonalName(e.target.value)}
+          placeholder="Your name"
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <label className={`${brand.subtext} text-sm`}>Personal Email</label>
+        <input
+          className={`w-full px-3 py-2 rounded-xl ${brand.border}`}
+          value={personalEmail}
+          onChange={(e) => setPersonalEmail(e.target.value)}
+          placeholder="you@club.com"
+          type="email"
+        />
+      </div>
+    </div>
+
+    <div className="flex">
+      <button
+        disabled={savingProfile}
+        className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}
+      >
+        {savingProfile ? "Saving…" : "Save personal details"}
+      </button>
+    </div>
+  </form>
+
+  {/* Password */}
+  <div className="mt-6">
+    <label className={`${brand.subtext} text-sm`}>Password</label>
+    <div className="grid sm:grid-cols-3 gap-3 items-end">
+      <input
+        className={`w-full px-3 py-2 rounded-xl ${brand.border} sm:col-span-2`}
+        value={personalPw}
+        onChange={(e) => setPersonalPw(e.target.value)}
+        placeholder="New password"
+        type="password"
+      />
+      <button
+        onClick={updatePassword}
+        disabled={savingPw}
+        className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}
+      >
+        {savingPw ? "Updating…" : "Update password"}
+      </button>
+    </div>
+  </div>
+</div>
+
           )}
 
           {/* --- Manage Users --- */}
