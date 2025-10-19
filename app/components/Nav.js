@@ -20,7 +20,7 @@ export default function Nav() {
           <Link href="/pricing"  className="text-slate-700 hover:text-slate-900">Pricing</Link>
           <Link href="/contact"  className="text-slate-700 hover:text-slate-900">Contact</Link>
 
-          <Link href="/Login" className="text-slate-700 hover:text-slate-900">
+          <Link href="/login" className="text-slate-700 hover:text-slate-900">
             Login
           </Link>
           <Link
@@ -50,7 +50,7 @@ export default function Nav() {
             <Link href="/features" className="py-2 text-slate-700" onClick={() => setOpen(false)}>Features</Link>
             <Link href="/pricing"  className="py-2 text-slate-700" onClick={() => setOpen(false)}>Pricing</Link>
             <Link href="/contact"  className="py-2 text-slate-700" onClick={() => setOpen(false)}>Contact</Link>
-            <Link href="/signin"   className="py-2 text-slate-700" onClick={() => setOpen(false)}>Sign in</Link>
+            <Link href="/login"   className="py-2 text-slate-700" onClick={() => setOpen(false)}>Login</Link>
             <Link
               href="/signup"
               className="py-2 px-4 rounded-xl border border-[#0ea568] text-[#0ea568] w-max"
