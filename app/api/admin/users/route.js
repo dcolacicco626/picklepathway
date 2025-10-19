@@ -113,17 +113,21 @@ export async function GET(req) {
 export async function POST(req) {
   const body = await req.json().catch(() => ({}));
   const { orgId, email, role = "admin", name } = body || {};
-  if (!orgId || !email) return NextResponse.json({ error: "Missing orgId or email" }, { status: 400 });
+  if (!orgId || !email) {
+    return NextResponse.json({ error: "Missing orgId or email" }, { status: 400 });
+  }
 
+  // AuthZ: admin only
   const supabaseAuth = authedClientFromRequest(req);
   const authz = await requireRole(supabaseAuth, orgId, ["admin"]);
-  if (!authz.ok) return NextResponse.json({ error: authz.msg }, { status: authz.status });
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.msg }, { status: authz.status });
+  }
 
   const admin = serviceClient();
+  const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || ""}/login`;
 
-  // 1) find or create user by email (send invite email)
-  let userId = null;
-
+  // 1) Does a user with this email already exist?
   const { data: all, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 2000 });
   if (listErr) return NextResponse.json({ error: listErr.message }, { status: 500 });
 
@@ -131,19 +135,48 @@ export async function POST(req) {
     (u) => (u.email || "").toLowerCase() === email.toLowerCase()
   );
 
+  let userId = null;
+  let actionLink = null;
+
   if (existing) {
+    // Existing user → generate a MAGIC LINK and (optionally) email it
     userId = existing.id;
+
+    // a) Generate a link you can surface in the UI
+    const { data: linkRes, error: linkErr } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: { redirectTo },
+    });
+    if (!linkErr) actionLink = linkRes?.properties?.action_link;
+
+    // b) Also try to send the magic-link email (does not block success)
+    const anon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, detectSessionInUrl: false },
+    });
+    await anon.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
   } else {
+    // New user → official INVITE email
     const { data: invited, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || ""}/login`,
+      redirectTo,
     });
     if (invErr) return NextResponse.json({ error: invErr.message }, { status: 500 });
     userId = invited?.user?.id;
+
+    // Also generate an invite link to show in the UI as a backup
+    const { data: linkRes, error: linkErr } = await admin.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: { redirectTo },
+    });
+    if (!linkErr) actionLink = linkRes?.properties?.action_link;
   }
 
-  if (!userId) return NextResponse.json({ error: "Could not create or find user" }, { status: 500 });
+  if (!userId) {
+    return NextResponse.json({ error: "Could not create or find user" }, { status: 500 });
+  }
 
-  // 2) upsert membership
+  // 2) Upsert membership
   const { error: memErr } = await admin
     .from("memberships")
     .insert({ user_id: userId, org_id: orgId, role })
@@ -154,7 +187,8 @@ export async function POST(req) {
     return NextResponse.json({ error: memErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  // Return a direct action link so you can copy/share if the email is filtered
+  return NextResponse.json({ ok: true, link: actionLink });
 }
 
 // DELETE /api/admin/users  { orgId, userId }

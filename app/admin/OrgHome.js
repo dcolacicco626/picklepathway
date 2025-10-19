@@ -295,55 +295,39 @@ async function inviteUser() {
   try {
     if (!inviteEmail) throw new Error("Email required");
 
-const res = await fetch("/api/admin/users", {
-  method: "POST",
-  headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-  body: JSON.stringify({ orgId, email: inviteEmail.trim(), role: inviteRole, name: inviteName || null }),
-});
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session?.access_token || ""}`,
+    };
 
+    const body = JSON.stringify({
+      orgId,
+      email: inviteEmail.trim(),
+      role: inviteRole,
+      name: inviteName || null,
+    });
 
-    // --- Safe JSON parse (handles empty body or HTML error) ---
-    let payload = null;
-    try {
-      const text = await res.text();
-      payload = text ? JSON.parse(text) : {};
-    } catch {
-      payload = {};
+    const res = await fetch("/api/admin/users", { method: "POST", headers, body });
+    const data = await res.json();
+
+    if (res.ok) {
+      setInviteName("");
+      setInviteEmail("");
+      setInviteRole("admin");
+      await loadMembers();
+      setSettingsMsg("Invite sent and membership created.");
+
+      if (data.link) {
+        setBackupInviteUrl(data.link); // Optional: show a "Copy invite link" button
+      }
+    } else {
+      setSettingsMsg(data?.error || "Invite failed");
     }
-
-    if (!res.ok) {
-      const msg = payload?.error || `Request failed (${res.status})`;
-      throw new Error(msg);
-    }
-
-    setInviteName("");
-    setInviteEmail("");
-    setInviteRole("admin");
-    await loadMembers();
-    setSettingsMsg("Invite sent and membership created.");
   } catch (e) {
     console.error("Invite failed:", e);
     setSettingsMsg(e?.message || String(e));
   }
 }
-
-  async function removeUser(user) {
-    setSettingsMsg("");
-    try {
- const res = await fetch("/api/admin/users", {
-  method: "DELETE",
-  headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-  body: JSON.stringify({ orgId, userId: user.user_id }),
-});
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Remove failed");
-      await loadMembers();
-      setSettingsMsg("User removed.");
-    } catch (e) {
-      setSettingsMsg(e?.message || String(e));
-    }
-  }
 
 async function saveDefaultClub() {
   setSavingSwitch(true);
