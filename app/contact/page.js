@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import Nav from "./components/Nav";
 
 export const metadata = {
   title: "Contact – Pickle Pathway",
