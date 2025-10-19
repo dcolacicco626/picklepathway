@@ -28,7 +28,6 @@ export const metadata = {
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#f7fbf8] text-slate-800">
-      <Nav />
 
       {/* Trial announcement bar */}
       <div className="w-full border-b border-emerald-100 bg-emerald-50/70">
