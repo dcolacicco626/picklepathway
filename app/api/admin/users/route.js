@@ -5,8 +5,8 @@ export const revalidate = 0;
 
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createServerClient, createClient } from "@supabase/supabase-js"; // service+browser SDK
-import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";   // for SERVICE ROLE client only
+import { createServerClient } from "@supabase/ssr";     // for reading the session from cookies
 
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
