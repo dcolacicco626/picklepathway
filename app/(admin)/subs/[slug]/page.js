@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { supabase } from "../../../lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function SubsSignupPage() {
   const { slug } = useParams();
