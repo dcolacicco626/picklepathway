@@ -1,4 +1,4 @@
-import Nav from "@/components/Nav"; // alias is safest
+import Nav from "../components/Nav";
 
 export const metadata = {
   title: "Pickle Pathway – League Software",
