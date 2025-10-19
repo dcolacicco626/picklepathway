@@ -20,8 +20,8 @@ export default function Nav() {
           <Link href="/pricing"  className="text-slate-700 hover:text-slate-900">Pricing</Link>
           <Link href="/contact"  className="text-slate-700 hover:text-slate-900">Contact</Link>
 
-          <Link href="/signin" className="text-slate-700 hover:text-slate-900">
-            Sign in
+          <Link href="/Login" className="text-slate-700 hover:text-slate-900">
+            Login
           </Link>
           <Link
             href="/signup"

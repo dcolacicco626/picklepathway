@@ -3,7 +3,6 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import Image from "next/image";
 
-
 // Optional: App Router supports metadata per page.
 // If you already set this in layout.js, you can remove this block.
 export const metadata = {
@@ -28,7 +27,6 @@ export const metadata = {
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#f7fbf8] text-slate-800">
-
       {/* Trial announcement bar */}
       <div className="w-full border-b border-emerald-100 bg-emerald-50/70">
         <div className="max-w-6xl mx-auto px-5 py-2 text-center text-sm text-emerald-900">
@@ -76,8 +74,6 @@ export default function HomePage() {
           />
         </div>
       </section>
-
-
 
       {/* Feature grid */}
       <section id="features" className="max-w-6xl mx-auto px-5 py-12 grid md:grid-cols-3 gap-6">
