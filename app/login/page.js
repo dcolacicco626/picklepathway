@@ -73,3 +73,4 @@ return (
     {msg && <p className="text-sm text-slate-600 mt-3">{msg}</p>}
   </div>
 );
+}
