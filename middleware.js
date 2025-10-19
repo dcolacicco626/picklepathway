@@ -2,45 +2,60 @@
 import { NextResponse } from "next/server";
 
 export const config = {
-  matcher: ["/((?!api/).*)"], // runs everywhere except /api/*
+  // run everywhere except API
+  matcher: ["/((?!api/).*)"],
 };
+
+const CANONICAL_HOST = "www.picklepathway.com";
 
 export function middleware(req) {
   const url = req.nextUrl;
   const host = req.headers.get("host") || "";
+  const proto = req.headers.get("x-forwarded-proto") || url.protocol.replace(":", "");
 
-  // --- 1) Force www in production ---
-  const isProd = (process.env.VERCEL_ENV || process.env.NODE_ENV) === "production";
+  const env = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
+  const isProd = env === "production";
   const isVercelPreview = host.endsWith(".vercel.app");
-  const isLocalhost = host.startsWith("localhost:");
-  const onApex = host === "picklepathway.com";
+  const isLocal = host.startsWith("localhost:");
 
-  if (isProd && !isVercelPreview && !isLocalhost && onApex) {
-    url.hostname = "www.picklepathway.com";
+  // 1) Redirect HTTP -> HTTPS in production (but not for vercel preview/local)
+  if (isProd && !isVercelPreview && !isLocal && proto !== "https") {
+    url.protocol = "https:";
     return NextResponse.redirect(url, 308);
   }
 
-  // --- 2) Optional: Basic Auth for /admin in preview/dev ---
-  if (url.pathname.startsWith("/admin")) {
-    const isPreview = !isProd;
-    if (isPreview) {
-      const header = req.headers.get("authorization") || "";
-      const [type, creds] = header.split(" ");
-      let user = "", pass = "";
-      if (type === "Basic" && creds) {
-        try {
-          const decoded =
-            typeof atob === "function" ? atob(creds) : Buffer.from(creds, "base64").toString("utf8");
-          [user, pass] = decoded.split(":");
-        } catch {}
-      }
-      const ok = user === "admin" && !!process.env.ADMIN_PASSWORD && pass === process.env.ADMIN_PASSWORD;
-      if (!ok) {
-        return new NextResponse("Unauthorized", {
-          status: 401,
-          headers: { "WWW-Authenticate": 'Basic realm="Admin (preview only)"' },
-        });
-      }
+  // 2) Redirect any non-www custom host -> www.picklepathway.com in production
+  //    (skip vercel preview/local)
+  const isNonWwwCustom =
+    isProd &&
+    !isVercelPreview &&
+    !isLocal &&
+    host !== CANONICAL_HOST;
+
+  if (isNonWwwCustom) {
+    url.hostname = CANONICAL_HOST;
+    // preserve path/search
+    return NextResponse.redirect(url, 308);
+  }
+
+  // 3) Optional: preview-only Basic Auth for /admin (not in prod)
+  if (url.pathname.startsWith("/admin") && !isProd) {
+    const header = req.headers.get("authorization") || "";
+    const [type, creds] = header.split(" ");
+    let user = "", pass = "";
+    if (type === "Basic" && creds) {
+      try {
+        const decoded =
+          typeof atob === "function" ? atob(creds) : Buffer.from(creds, "base64").toString("utf8");
+        [user, pass] = decoded.split(":");
+      } catch {}
+    }
+    const ok = user === "admin" && !!process.env.ADMIN_PASSWORD && pass === process.env.ADMIN_PASSWORD;
+    if (!ok) {
+      return new NextResponse("Unauthorized", {
+        status: 401,
+        headers: { "WWW-Authenticate": 'Basic realm="Admin (preview only)"' },
+      });
     }
   }
 
