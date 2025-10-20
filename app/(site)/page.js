@@ -133,9 +133,7 @@ export default function HomePage() {
 
       {/* Footer CTA */}
       <section className="max-w-6xl mx-auto px-5 py-12 text-center">
-        <Link href="/signup" className="px-6 py-3 rounded-xl bg-[#0ea568] text-white">
-          Start free trial
-        </Link>
+    
         <p className="text-xs text-slate-500 mt-4">
           Minimal cookies for analytics only. © {new Date().getFullYear()} Pickle Pathway. •{" "}
           <Link href="/privacy" className="underline">Privacy</Link> •{" "}

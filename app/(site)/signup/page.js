@@ -57,7 +57,7 @@ export default function SignupPage() {
 
   return (
     <div className="max-w-md mx-auto px-5 py-12">
-      <h1 className="text-2xl font-bold mb-4">Create your club</h1>
+      <h1 className="text-2xl font-bold mb-4">Create Your Free Club Account</h1>
       <form onSubmit={onSubmit} className="grid gap-3">
         <input className="px-3 py-2 rounded-md border" placeholder="Club name" required
           value={clubName} onChange={(e)=>setClubName(e.target.value)} />

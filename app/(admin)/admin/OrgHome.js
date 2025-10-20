@@ -611,7 +611,7 @@ async function switchNow() {
             </div>
 
             <div className="flex items-end">
-           + <button
+            <button
    onClick={isLocked ? undefined : createLeague}
    disabled={creating || isLocked}
    title={isLocked ? "Trial ended — upgrade to create leagues" : ""}
