@@ -37,6 +37,7 @@ function toSlug(s) {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
 }
 
+
 /* ========= Main Component ========= */
 export default function OrgHome({ orgId }) {
   const router = useRouter();
@@ -83,6 +84,9 @@ const [savingProfile, setSavingProfile] = useState(false);
 const [savingPw, setSavingPw] = useState(false);
 // Club name saving toggle (needed by the Save button in the Club tab)
 const [savingClub, setSavingClub] = useState(false);
+const [membership, setMembership] = useState({ plan: "trial", remainingDays: 14, locked: false, subscription_status: null });
+const [promoInput, setPromoInput] = useState("");
+
 
 
 
@@ -210,18 +214,37 @@ const loadMyOrgs = useCallback(async () => {
   }
 }, [orgId, switchChoice]);
 
+const loadMembership = useCallback(async () => {
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`/api/membership/status?orgId=${orgId}`, { headers, cache: "no-store" });
+    const json = await res.json();
+    if (res.ok) setMembership(json);
+  } catch {}
+}, [orgId]);
+
 
   useEffect(() => {
     loadOrg();
     loadLeagues();
     loadMembers();
 loadMyOrgs();   // 👈 add this
-}, [loadOrg, loadLeagues, loadMembers, loadMyOrgs]);
+loadMembership();
+}, [loadOrg, loadLeagues, loadMembers, loadMyOrgs, loadMembership]);
 
   const activeLeagues = useMemo(() => leagues, [leagues]);
+const isTrial = membership?.plan === "trial";
+const remaining = typeof membership?.remainingDays === "number" ? membership.remainingDays : 0;
+const isLocked = !!membership?.locked;
+
 
   /* ===== Create League ===== */
   async function createLeague() {
+  if (isLocked) {
+    alert("Your free trial has ended. Please upgrade to keep creating leagues.");
+    setSettingsOpen(true); setSettingsTab("membership");
+    return;
+  }
     const raw = divInput.trim();
     if (!raw) return alert("Enter a league division name");
     const slug = toSlug(raw);
@@ -497,6 +520,21 @@ async function switchNow() {
   }
 }
 
+{isTrial && (
+  <div className="sticky top-0 z-40 bg-amber-50 border-b border-amber-200">
+    <div className="max-w-5xl mx-auto px-6 py-2 text-sm text-amber-900 flex items-center justify-between">
+      <div>
+        <strong>Free Trial</strong> — {remaining} {remaining === 1 ? "day" : "days"} remaining
+      </div>
+      <button
+        className="px-3 py-1.5 rounded-lg border border-amber-400 text-amber-900 hover:bg-amber-100"
+        onClick={() => { setSettingsOpen(true); setSettingsTab("membership"); }}
+      >
+        Upgrade today
+      </button>
+    </div>
+  </div>
+)}
 
 
   return (
@@ -573,9 +611,14 @@ async function switchNow() {
             </div>
 
             <div className="flex items-end">
-              <button onClick={createLeague} disabled={creating} className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}>
-                {creating ? "Creating…" : "Create league"}
-              </button>
+           + <button
+   onClick={isLocked ? undefined : createLeague}
+   disabled={creating || isLocked}
+   title={isLocked ? "Trial ended — upgrade to create leagues" : ""}
+   className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857] disabled:opacity-60`}
+ >
+   {isLocked ? "Locked — upgrade" : (creating ? "Creating…" : "Create league")}
+ </button>
             </div>
           </div>
 
@@ -640,7 +683,7 @@ async function switchNow() {
             {[
               ["club", "Club & Personal Details"],
               ["users", "Manage Users"],
-              ["billing", "Manage Payment"],
+              ["membership", "Manage Membership"],
               ["emails", "Default Email Templates"],
               ["archived", "View Archived Leagues"],
               ["switch", "Switch Club"],
@@ -859,12 +902,78 @@ async function switchNow() {
             </div>
           )}
 
-          {/* --- Manage Payment --- */}
-          {settingsTab === "billing" && (
-            <div className="space-y-1 text-sm text-slate-600">
-              Stripe integration coming soon. Update plan and payment method here.
-            </div>
-          )}
+          {/* --- Manage Membership --- */}
+       {settingsTab === "membership" && (
+   <div className="space-y-5">
+     <div className="text-sm text-slate-600">
+       <div className="font-medium text-slate-800">Current plan</div>
+       <div className="mt-1">
+         {isTrial ? (
+           <>Free Trial — <strong>{remaining}</strong> {remaining === 1 ? "day" : "days"} remaining</>
+         ) : (
+           <>{membership?.plan?.toUpperCase() || "PRO"}</>
+         )}
+       </div>
+       {isLocked && (
+         <div className="mt-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+           Your trial has ended. Upgrade to continue creating and managing leagues.
+         </div>
+       )}
+     </div>
+
+     <div className="flex flex-wrap gap-3">
+       <button
+         onClick={() => alert("Stripe Checkout/Portal coming soon")}
+         className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}
+       >
+         {isTrial ? "Upgrade to Pro" : "Manage membership"}
+       </button>
+       <button
+         onClick={loadMembership}
+         className={`px-4 py-2 rounded-xl ${brand.ctaOutline}`}
+       >
+         Refresh status
+       </button>
+     </div>
+
+     <div className="border-t border-slate-200 pt-5">
+       <div className="font-medium text-slate-800 mb-2">Promo code</div>
+       <div className="flex gap-2">
+         <input
+           value={promoInput}
+           onChange={(e) => setPromoInput(e.target.value)}
+           placeholder="Enter promo code"
+           className={`px-3 py-2 rounded-xl ${brand.border}`}
+         />
+         <button
+           onClick={async () => {
+             try {
+               const headers = await authHeaders();
+               const res = await fetch("/api/membership/promo", {
+                 method: "POST",
+                 headers: { "Content-Type": "application/json", ...headers },
+                 body: JSON.stringify({ orgId, promoCode: promoInput }),
+               });
+               const json = await res.json();
+               if (!res.ok) throw new Error(json?.error || "Failed to apply code");
+               setPromoInput("");
+               setSettingsMsg("Promo code saved.");
+               await loadMembership();
+             } catch (e) {
+               setSettingsMsg(e?.message || "Could not apply promo code");
+             }
+           }}
+           className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}
+         >
+           Apply
+         </button>
+       </div>
+       {membership?.promo_code ? (
+         <div className="text-xs text-slate-500 mt-2">Current promo code: {membership.promo_code}</div>
+       ) : null}
+     </div>
+   </div>
+ )}
 
           {/* --- Email Templates --- */}
           {settingsTab === "emails" && (
