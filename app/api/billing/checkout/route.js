@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
+
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 
@@ -27,6 +28,7 @@ export async function POST(req) {
       .select("id, stripe_customer_id")
       .eq("id", orgId)
       .single();
+const stripe = getStripe();
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
