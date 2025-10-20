@@ -8,7 +8,7 @@ import Image from "next/image";
 export const metadata = {
   title: "Pickle Pathway – Run Pickleball Leagues Effortlessly",
   description:
-    "Pickleball league software that automates emails, standings, and subs. Built by club operators for clubs. Start a free 2-week trial.",
+    "Pickleball league software that automates emails, standings, and tracks subs. Built by club operators for clubs. Start a free 2-week trial.",
   openGraph: {
     title: "Pickle Pathway – Run Pickleball Leagues Effortlessly",
     description:
