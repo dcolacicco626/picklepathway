@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
@@ -18,6 +18,7 @@ export async function POST() {
       .select("stripe_customer_id")
       .eq("id", orgId)
       .single();
+const stripe = getStripe(); 
 
     if (error || !org?.stripe_customer_id) {
       return NextResponse.json({ error: "No Stripe customer" }, { status: 400 });
