@@ -583,24 +583,48 @@ async function openCheckout(tier = "pro") {
 
 async function openPortal() {
   try {
-    // ✅ Ensure org_id cookie exists for this org
-    const ok = await ensureActiveOrgCookie(orgId);
-    if (!ok) {
-      alert("No active org. Please switch to a club first.");
+    // Ensure/set active org first (same pattern as Upgrade)
+    const ensure = await fetch("/api/admin/active-org", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}), // let the API infer from membership or cookie
+    });
+    const ej = await ensure.json();
+    if (!ensure.ok) {
+      alert(ej.error || "Please switch to a club first.");
       return;
     }
 
-    const res = await fetch("/api/billing/portal", {
+    const orgId = ej.orgId;
+
+    // Ask server for current membership + a Stripe portal URL
+    const r = await fetch("/api/membership/status", {
       method: "POST",
-      headers: { ...(await authHeaders()) },
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId }),
     });
-    const json = await res.json();
-    if (!res.ok || !json?.url) throw new Error(json?.error || "Portal failed");
-    window.location.href = json.url; // Go to Stripe Billing Portal
-  } catch (e) {
-    alert(e?.message || "Could not open billing portal");
+
+    const j = await r.json();
+
+    if (!r.ok) {
+      alert(j.error || "Could not load membership.");
+      return;
+    }
+
+    // If server returns a portal URL, go there
+    if (j.portal_url) {
+      window.location.href = j.portal_url;
+      return;
+    }
+
+    // Otherwise, show whatever status you need
+    console.log("Membership status:", j);
+  } catch (err) {
+    console.error("openPortal error", err);
+    alert("Something went wrong. Please try again.");
   }
 }
+
 
 
 {isTrial && (
@@ -1044,16 +1068,15 @@ async function handleUpgradeClick(selectedOrgId) {
      </div>
 
      <div className="flex flex-wrap gap-3">
-<Button
+<button
   onClick={() =>
-    isTrial
-      ? handleUpgradeClick(activeOrgId) // ✅ new function
-      : openPortal()
+    isTrial ? handleUpgradeClick(activeOrgId) : openPortal()
   }
   className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}
 >
   {isTrial ? "Upgrade to Pro" : "Manage membership"}
-</Button>
+</button>
+
 
 
        <button

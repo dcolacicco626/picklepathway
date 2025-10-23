@@ -53,7 +53,12 @@ export async function GET(req) {
     // orgId from query OR cookie
     const url = new URL(req.url);
     const qOrgId = url.searchParams.get("orgId");
-    const cOrgId = cookies().get("org_id")?.value || null;
+ const cookieJar = cookies();
+const cOrgId =
+  cookieJar.get("org_id")?.value ||
+  cookieJar.get("active_org")?.value ||
+  null;
+
     const orgId = qOrgId || cOrgId;
 
     if (!orgId) {
