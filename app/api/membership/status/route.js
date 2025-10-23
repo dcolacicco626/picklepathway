@@ -1,109 +1,59 @@
-// app/api/membership/status/route.js
-export const runtime = "nodejs";
-
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
+import Stripe from "stripe";
 
-const need = (k) => {
-  const v = process.env[k];
-  if (!v) throw new Error(`Missing env: ${k}`);
-  return v;
-};
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
 
-function computeStatus(org) {
-  const now = new Date();
-
-  // trial window
-  const started = org.trial_started_at ? new Date(org.trial_started_at) : null;
-  const days = Number.isFinite(org.trial_days) ? org.trial_days : 14;
-  const trialEnd =
-    started && days > 0
-      ? new Date(started.getTime() + days * 24 * 3600 * 1000)
-      : null;
-  const remainingDays =
-    trialEnd && trialEnd > now
-      ? Math.max(0, Math.ceil((trialEnd - now) / (24 * 3600 * 1000)))
-      : 0;
-
-  // paid/active window
-  const activeUntil = org.active_until ? new Date(org.active_until) : null;
-  const subStatus = String(org.subscription_status || "").toLowerCase();
-  const hasActiveSub =
-    !!org.stripe_subscription_id &&
-    (["active", "trialing", "incomplete", "past_due"].includes(subStatus) ||
-      (activeUntil && activeUntil > now));
-
-  // lock rules
-  const locked = hasActiveSub ? false : remainingDays <= 0;
-
-  // normalize plan label for UI
-  const plan =
-    hasActiveSub
-      ? String(org.plan || "starter").toLowerCase()
-      : remainingDays > 0
-      ? "trial"
-      : String(org.plan || "starter").toLowerCase();
-
-  return { plan, remainingDays, locked };
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    { auth: { persistSession: false } }
+  );
 }
 
-export async function GET(req) {
+export async function POST(req) {
   try {
-    // orgId from query OR cookie
-    const url = new URL(req.url);
-    const qOrgId = url.searchParams.get("orgId");
- const cookieJar = cookies();
-const cOrgId =
-  cookieJar.get("org_id")?.value ||
-  cookieJar.get("active_org")?.value ||
-  null;
+    const c = cookies();
+    let body = {};
+    try { body = await req.json(); } catch {}
 
-    const orgId = qOrgId || cOrgId;
+    const orgId = body.orgId || c.get("active_org")?.value;
+    if (!orgId) return NextResponse.json({ error: "No active org." }, { status: 400 });
 
-    if (!orgId) {
-      return NextResponse.json({ error: "No active org" }, { status: 400 });
-    }
-
-    // Server-side: use service role to bypass RLS safely
-    const supa = createClient(
-      need("NEXT_PUBLIC_SUPABASE_URL"),
-      need("SUPABASE_SERVICE_ROLE_KEY")
-    );
-
-    const { data: org, error } = await supa
+    const supabase = getSupabase();
+    const { data: org, error: orgErr } = await supabase
       .from("orgs")
-      .select(
-        "id, name, slug, plan, trial_started_at, trial_days, active_until, subscription_status, promo_code, stripe_customer_id, stripe_subscription_id"
-      )
+      .select("id, plan, stripe_customer_id, stripe_subscription_id, subscription_status, active_until")
       .eq("id", orgId)
-      .single();
+      .maybeSingle();
 
-    if (error || !org) {
-      return NextResponse.json(
-        { error: error?.message || "Org not found" },
-        { status: 404 }
-      );
+    if (orgErr || !org) return NextResponse.json({ error: "Org not found." }, { status: 404 });
+
+    let sub = null;
+    if (org.stripe_subscription_id) {
+      try { sub = await stripe.subscriptions.retrieve(org.stripe_subscription_id); } catch {}
     }
 
-    const { plan, remainingDays, locked } = computeStatus(org);
+    let portal_url = null;
+    if (org.stripe_customer_id) {
+      const session = await stripe.billingPortal.sessions.create({
+        customer: org.stripe_customer_id,
+        return_url: `${process.env.NEXT_PUBLIC_SITE_URL || "https://www.picklepathway.com"}/admin`,
+      });
+      portal_url = session.url;
+    }
 
     return NextResponse.json({
-      orgId: org.id,
-      name: org.name,
-      slug: org.slug,
-      plan,
-      remainingDays,
-      locked,
-      promo_code: org.promo_code || null,
-      stripe: {
-        customer: org.stripe_customer_id || null,
-        subscription: org.stripe_subscription_id || null,
-        status: org.subscription_status || null,
-        active_until: org.active_until,
-      },
+      orgId,
+      plan: org.plan,
+      subscription_status: sub?.status || org.subscription_status || null,
+      active_until: org.active_until,
+      portal_url,
     });
-  } catch (e) {
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+  } catch (err) {
+    console.error("/api/membership/status error", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

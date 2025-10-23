@@ -1,6 +1,33 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@supabase/supabase-js";
+
+function getSupabase(token) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    { auth: { persistSession: false } }
+  );
+  const baseFetch = supabase.fetch.bind(supabase);
+  supabase.fetch = (url, init = {}) => {
+    init.headers = Object.assign({}, init.headers, token ? { Authorization: `Bearer ${token}` } : {});
+    return baseFetch(url, init);
+  };
+  return supabase;
+}
+
+function getAccessTokenFromCookies(c) {
+  const direct = c.get("sb-access-token")?.value;
+  if (direct) return direct;
+  const entry = [...c.getAll().values()].find(ck => ck.name.startsWith("sb-") && ck.name.endsWith("-auth-token"));
+  if (entry?.value) {
+    try {
+      const parsed = JSON.parse(entry.value);
+      return parsed?.access_token || parsed?.currentSession?.access_token || null;
+    } catch { return null; }
+  }
+  return null;
+}
 
 export async function GET() {
   const c = cookies();
@@ -10,28 +37,19 @@ export async function GET() {
 export async function POST(req) {
   try {
     const c = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => c });
+    const token = getAccessTokenFromCookies(c);
+    const supabase = getSupabase(token);
 
-    const {
-      data: { user },
-      error: authErr,
-    } = await supabase.auth.getUser();
-
+    const { data: userData, error: authErr } = await supabase.auth.getUser(token || undefined);
+    const user = userData?.user;
     if (authErr || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Safe parse
     let body = {};
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
-    }
-
+    try { body = await req.json(); } catch {}
     let orgId = body.orgId;
 
-    // Try to infer org if not provided
     if (!orgId) {
       const { data: m } = await supabase
         .from("org_members")
@@ -44,13 +62,9 @@ export async function POST(req) {
     }
 
     if (!orgId) {
-      return NextResponse.json(
-        { error: "No active org. Please switch to a club first." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No active org. Please switch to a club first." }, { status: 400 });
     }
 
-    // Verify membership
     const { data: membership } = await supabase
       .from("org_members")
       .select("org_id")

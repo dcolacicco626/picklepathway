@@ -41,6 +41,27 @@ function toSlug(s) {
 /* ========= Main Component ========= */
 export default function OrgHome({ orgId }) {
   const router = useRouter();
+  const [activeOrgId, setActiveOrgId] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function initActive() {
+      // Prefer the prop if it exists
+      if (orgId) {
+        setActiveOrgId(orgId);
+        return;
+      }
+      // Otherwise try to read from the cookie via the API
+      try {
+        const r = await fetch("/api/admin/active-org", { cache: "no-store" });
+        const j = await r.json();
+        if (!cancelled && j?.orgId) setActiveOrgId(j.orgId);
+      } catch {}
+    }
+    initActive();
+    return () => { cancelled = true; };
+  }, [orgId]);
+
 
   // ----- Create league form -----
   const [leagueType, setLeagueType] = useState("ladder"); // only option for now
@@ -537,6 +558,7 @@ async function switchNow() {
 
     // ✅ Also set the active org cookie so billing and admin APIs use the new org immediately
     await ensureActiveOrgCookie(switchChoice);
+setActiveOrgId(switchChoice);
 
     // Reload admin for the new org
     router.replace("/admin");
@@ -587,7 +609,7 @@ async function openPortal() {
     const ensure = await fetch("/api/admin/active-org", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}), // let the API infer from membership or cookie
+      body: JSON.stringify(activeOrgId ? { orgId: activeOrgId } : {}),
     });
     const ej = await ensure.json();
     if (!ensure.ok) {
