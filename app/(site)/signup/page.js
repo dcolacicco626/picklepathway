@@ -68,7 +68,7 @@ export default function SignupPage() {
       // 4️⃣ Link membership (owner)
       const { error: memErr } = await supabase
         .from("memberships")
-        .insert({ user_id: user.id, org_id: org.id, role: "owner" });
+        .insert({ user_id: user.id, org_id: org.id, role: "admin" });
 
       if (memErr && !String(memErr.message).includes("duplicate")) throw memErr;
 
