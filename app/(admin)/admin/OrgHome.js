@@ -519,6 +519,43 @@ async function switchNow() {
     setSavingSwitch(false);
   }
 }
+async function openCheckout(tier = "pro") {
+  try {
+    const priceId =
+      tier === "pro"
+        ? process.env.NEXT_PUBLIC_PRICE_PRO
+        : process.env.NEXT_PUBLIC_PRICE_STARTER;
+    if (!priceId) {
+      alert("Missing NEXT_PUBLIC_PRICE_* env var");
+      return;
+    }
+
+    const res = await fetch("/api/billing/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+      body: JSON.stringify({ priceId, orgId }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.url) throw new Error(json?.error || "Checkout failed");
+    window.location.href = json.url; // Go to Stripe Checkout
+  } catch (e) {
+    alert(e?.message || "Could not start checkout");
+  }
+}
+
+async function openPortal() {
+  try {
+    const res = await fetch("/api/billing/portal", {
+      method: "POST",
+      headers: { ...(await authHeaders()) },
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.url) throw new Error(json?.error || "Portal failed");
+    window.location.href = json.url; // Go to Stripe Billing Portal
+  } catch (e) {
+    alert(e?.message || "Could not open billing portal");
+  }
+}
 
 {isTrial && (
   <div className="sticky top-0 z-40 bg-amber-50 border-b border-amber-200">
@@ -922,12 +959,13 @@ async function switchNow() {
      </div>
 
      <div className="flex flex-wrap gap-3">
-       <button
-         onClick={() => alert("Stripe Checkout/Portal coming soon")}
-         className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}
-       >
-         {isTrial ? "Upgrade to Pro" : "Manage membership"}
-       </button>
+ <button
+  onClick={() => (isTrial ? openCheckout("pro") : openPortal())}
+  className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}
+>
+  {isTrial ? "Upgrade to Pro" : "Manage membership"}
+</button>
+
        <button
          onClick={loadMembership}
          className={`px-4 py-2 rounded-xl ${brand.ctaOutline}`}
