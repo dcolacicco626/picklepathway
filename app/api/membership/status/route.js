@@ -41,7 +41,7 @@ async function handleStatus(req) {
   // 4) last-used fallback
   if (!orgId) {
     const { data: m } = await supabase
-      .from("org_members")
+     .from("memberships")
       .select("org_id")
       .eq("user_id", user.id)
       .order("last_used_at", { ascending: false })
@@ -54,7 +54,7 @@ async function handleStatus(req) {
 
   // Verify membership
   const { data: membership } = await supabase
-    .from("org_members")
+   .from("memberships")
     .select("org_id")
     .eq("org_id", orgId)
     .eq("user_id", user.id)

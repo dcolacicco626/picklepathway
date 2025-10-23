@@ -17,7 +17,7 @@ export async function POST() {
     let orgId = c.get("active_org")?.value ?? null;
     if (!orgId) {
       const { data: m } = await supabase
-        .from("org_members").select("org_id")
+        .from("memberships").select("org_id")
         .eq("user_id", user.id).order("last_used_at", { ascending: false })
         .limit(1).maybeSingle();
       orgId = m?.org_id ?? null;
@@ -25,7 +25,7 @@ export async function POST() {
     if (!orgId) return NextResponse.json({ error: "No active org" }, { status: 400 });
 
     const { data: membership } = await supabase
-      .from("org_members").select("org_id")
+      .from("memberships").select("org_id")
       .eq("org_id", orgId).eq("user_id", user.id).maybeSingle();
     if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

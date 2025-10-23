@@ -25,7 +25,7 @@ export async function POST(req) {
 
     if (!orgId) {
       const { data: m } = await supabase
-        .from("org_members")
+        .from("memberships")
         .select("org_id")
         .eq("user_id", user.id)
         .order("last_used_at", { ascending: false })
@@ -37,7 +37,7 @@ export async function POST(req) {
 
     // Verify membership
     const { data: membership } = await supabase
-      .from("org_members")
+      .from("memberships")
       .select("org_id")
       .eq("org_id", orgId)
       .eq("user_id", user.id)
@@ -56,7 +56,7 @@ export async function POST(req) {
 
     // Optional: update "last used"
     await supabase
-      .from("org_members")
+      .from("memberships")
       .update({ last_used_at: new Date().toISOString() })
       .eq("org_id", orgId)
       .eq("user_id", user.id);
