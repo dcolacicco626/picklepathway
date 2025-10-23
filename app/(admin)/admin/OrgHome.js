@@ -262,12 +262,23 @@ const loadMyOrgs = useCallback(async () => {
 
 const loadMembership = useCallback(async () => {
   try {
-    const headers = await authHeaders();
-    const res = await fetch(`/api/membership/status?orgId=${orgId}`, { headers, cache: "no-store" });
+    const res = await fetch("/api/membership/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(orgId ? { orgId } : {}),
+      cache: "no-store",
+    });
     const json = await res.json();
-    if (res.ok) setMembership(json);
-  } catch {}
+    if (res.ok) {
+      setMembership(json);
+    } else {
+      console.warn("membership/status error", json);
+    }
+  } catch (e) {
+    console.error("loadMembership error", e);
+  }
 }, [orgId]);
+
 
 
   useEffect(() => {
