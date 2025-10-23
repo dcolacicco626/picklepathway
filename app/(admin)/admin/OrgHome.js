@@ -693,11 +693,12 @@ async function handleUpgradeClick(selectedOrgId) {
     }
 
     // 2) Create Stripe checkout session (your existing route)
-    const stripeRes = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orgId: data.orgId, plan: "pro" }),
-    });
+const stripeRes = await fetch("/api/billing/checkout", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ orgId: data.orgId, plan: "pro" }),
+});
+
 
     const stripeData = await stripeRes.json();
 
