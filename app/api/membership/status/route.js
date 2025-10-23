@@ -1,3 +1,6 @@
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
@@ -7,8 +10,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-06-
 
 export async function POST(req) {
   try {
+    const supabase = createRouteHandlerClient({ cookies });
     const c = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => c });
 
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
     if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -16,7 +19,6 @@ export async function POST(req) {
     let body = {}; try { body = await req.json(); } catch {}
     let orgId = body.orgId ?? c.get("active_org")?.value ?? null;
 
-    // Resolve + verify membership
     if (!orgId) {
       const { data: m } = await supabase
         .from("org_members").select("org_id")
@@ -31,20 +33,17 @@ export async function POST(req) {
       .eq("org_id", orgId).eq("user_id", user.id).maybeSingle();
     if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    // Read org (RLS should allow members)
     const { data: org, error: orgErr } = await supabase
       .from("orgs")
       .select("id, plan, stripe_customer_id, stripe_subscription_id, subscription_status, active_until")
       .eq("id", orgId).maybeSingle();
     if (orgErr || !org) return NextResponse.json({ error: "Org not found." }, { status: 404 });
 
-    // Optional: refresh subscription
     let sub = null;
     if (org.stripe_subscription_id) {
       try { sub = await stripe.subscriptions.retrieve(org.stripe_subscription_id); } catch {}
     }
 
-    // Billing portal
     let portal_url = null;
     if (org.stripe_customer_id) {
       const session = await stripe.billingPortal.sessions.create({
@@ -55,7 +54,8 @@ export async function POST(req) {
     }
 
     return NextResponse.json({
-      orgId, plan: org.plan,
+      orgId,
+      plan: org.plan,
       subscription_status: sub?.status || org.subscription_status || null,
       active_until: org.active_until,
       portal_url,

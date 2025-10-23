@@ -1,22 +1,22 @@
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
-import { getStripe } from "@/lib/stripe";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { getStripe } from "@/lib/stripe";
 
 export async function POST(req) {
   try {
+    const supabase = createRouteHandlerClient({ cookies });
     const c = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => c });
+
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
     if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
-    const { priceId, orgId: orgIdFromBody, plan } = body;
-    if (!priceId && !plan) {
-      return NextResponse.json({ error: "Missing priceId or plan" }, { status: 400 });
-    }
+    const { priceId, plan, orgId: orgIdFromBody } = body;
 
-    // Resolve org
     let orgId = orgIdFromBody ?? c.get("active_org")?.value ?? null;
     if (!orgId) {
       const { data: m } = await supabase
@@ -27,20 +27,19 @@ export async function POST(req) {
     }
     if (!orgId) return NextResponse.json({ error: "No active org" }, { status: 400 });
 
-    // Verify membership
     const { data: membership } = await supabase
       .from("org_members").select("org_id")
       .eq("org_id", orgId).eq("user_id", user.id).maybeSingle();
     if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    // Get org for existing customer (allowed by RLS as member)
+    // Fetch org to reuse Stripe customer if exists
     const { data: org } = await supabase
-      .from("orgs").select("id, stripe_customer_id").eq("id", orgId).single();
+      .from("orgs").select("stripe_customer_id").eq("id", orgId).single();
 
     const stripe = getStripe();
 
-    // Map plan→price if you prefer (optional); otherwise require priceId
-    const price = priceId; // or lookup by plan in your config
+    const price = priceId /* or map plan->price here */;
+    if (!price) return NextResponse.json({ error: "Missing priceId" }, { status: 400 });
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
