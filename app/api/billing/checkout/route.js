@@ -93,7 +93,6 @@ if (!price) {
       mode: "subscription",
       allow_promotion_codes: true,
       customer: org?.stripe_customer_id || undefined,
-      customer_creation: org?.stripe_customer_id ? undefined : "always",
       line_items: [{ price, quantity: 1 }],
       metadata: { org_id: String(orgId) },
       subscription_data: { metadata: { org_id: String(orgId) } },
