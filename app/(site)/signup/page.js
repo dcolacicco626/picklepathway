@@ -43,13 +43,22 @@ export default function SignupPage() {
         .maybeSingle();
       if (orgErr) throw orgErr;
 
-      // Link membership (owner)
-      const { error: memErr } = await supabase
-        .from("memberships")
-        .insert({ user_id: user.id, org_id: org.id, role: "admin" });
-      if (memErr && !String(memErr.message).includes("duplicate")) throw memErr;
+// Link membership (owner)
+const { error: memErr } = await supabase
+  .from("memberships")
+  .insert({ user_id: user.id, org_id: org.id, role: "owner" }); // match your DB constraint
+if (memErr && !String(memErr.message).includes("duplicate")) throw memErr;
 
-      router.replace(`/admin/`);
+// ✅ Step 2 — set active org cookie
+await fetch("/api/admin/active-org", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ orgId: org.id }),
+});
+
+// ✅ Redirect to admin dashboard
+router.replace(`/admin/`);
+
     } catch (e) {
       setMsg(e?.message || String(e));
     }

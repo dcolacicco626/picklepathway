@@ -97,6 +97,31 @@ async function authHeaders() {
   const token = session?.access_token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
+// Ensures the server has an active org_id cookie for this browser.
+// If missing, it will set it to the provided orgId (prop) or a specific choice.
+async function ensureActiveOrgCookie(targetOrgId) {
+  try {
+    // Do we already have it?
+    const r = await fetch("/api/admin/active-org", { cache: "no-store" });
+    const { orgId: cookieOrg } = await r.json();
+    const desired = String(targetOrgId || "");
+    if (cookieOrg && (!desired || cookieOrg === desired)) return cookieOrg;
+
+    // Set the cookie to the target org id (prop or selection)
+    if (!desired) throw new Error("No active org");
+    const post = await fetch("/api/admin/active-org", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: desired }),
+    });
+    if (!post.ok) throw new Error("Failed to set active org");
+    return desired;
+  } catch (e) {
+    console.warn("ensureActiveOrgCookie:", e);
+    return null;
+  }
+}
+
 useEffect(() => {
   (async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -502,14 +527,18 @@ async function switchNow() {
   if (!switchChoice || switchChoice === orgId) return;
   setSavingSwitch(true);
   try {
-    // Persist the choice as active org so /admin loads the right one
+    // Persist preference (your existing behavior)
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase
         .from("user_prefs")
         .upsert({ user_id: user.id, active_org_id: switchChoice });
     }
-    // Your admin page is /admin (no slug), so route there
+
+    // ✅ Also set the active org cookie so billing and admin APIs use the new org immediately
+    await ensureActiveOrgCookie(switchChoice);
+
+    // Reload admin for the new org
     router.replace("/admin");
     setSettingsOpen(false);
     setSettingsMsg("Switched club.");
@@ -519,6 +548,7 @@ async function switchNow() {
     setSavingSwitch(false);
   }
 }
+
 async function openCheckout(tier = "pro") {
   try {
     const priceId =
@@ -530,10 +560,17 @@ async function openCheckout(tier = "pro") {
       return;
     }
 
+    // ✅ Make sure org_id cookie exists for this org
+    const ok = await ensureActiveOrgCookie(orgId);
+    if (!ok) {
+      alert("No active org. Please switch to a club first.");
+      return;
+    }
+
     const res = await fetch("/api/billing/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-      body: JSON.stringify({ priceId, orgId }),
+      body: JSON.stringify({ priceId, orgId }), // also pass in body as fallback
     });
     const json = await res.json();
     if (!res.ok || !json?.url) throw new Error(json?.error || "Checkout failed");
@@ -543,8 +580,16 @@ async function openCheckout(tier = "pro") {
   }
 }
 
+
 async function openPortal() {
   try {
+    // ✅ Ensure org_id cookie exists for this org
+    const ok = await ensureActiveOrgCookie(orgId);
+    if (!ok) {
+      alert("No active org. Please switch to a club first.");
+      return;
+    }
+
     const res = await fetch("/api/billing/portal", {
       method: "POST",
       headers: { ...(await authHeaders()) },
@@ -556,6 +601,7 @@ async function openPortal() {
     alert(e?.message || "Could not open billing portal");
   }
 }
+
 
 {isTrial && (
   <div className="sticky top-0 z-40 bg-amber-50 border-b border-amber-200">

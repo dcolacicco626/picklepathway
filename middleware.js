@@ -1,63 +1,76 @@
-// /middleware.js
+// middleware.js
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export const config = {
-  // run everywhere except API
-  matcher: ["/((?!api/).*)"],
+  // run for everything except API routes and static assets
+  matcher: ["/((?!api/|_next/|static/|favicon.ico).*)"],
 };
 
 const CANONICAL_HOST = "www.picklepathway.com";
 
-export function middleware(req) {
-  const url = req.nextUrl;
-  const host = req.headers.get("host") || "";
-  const proto = req.headers.get("x-forwarded-proto") || url.protocol.replace(":", "");
-
-  const env = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
-  const isProd = env === "production";
+function isPreviewOrLocal(host, env) {
   const isVercelPreview = host.endsWith(".vercel.app");
-  const isLocal = host.startsWith("localhost:");
+  const isLocal = host.startsWith("localhost:") || host.startsWith("127.0.0.1:");
+  const isDev = env !== "production";
+  return isVercelPreview || isLocal || isDev;
+}
 
-  // 1) Redirect HTTP -> HTTPS in production (but not for vercel preview/local)
-  if (isProd && !isVercelPreview && !isLocal && proto !== "https") {
+export async function middleware(req) {
+  const url = req.nextUrl;
+  const host = (req.headers.get("host") || "").toLowerCase();
+  const proto = req.headers.get("x-forwarded-proto") || url.protocol.replace(":", "");
+  const env = process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
+  const previewOrLocal = isPreviewOrLocal(host, env);
+
+  // 1) Force HTTPS in production (but not for preview/local)
+  if (env === "production" && !previewOrLocal && proto !== "https") {
     url.protocol = "https:";
     return NextResponse.redirect(url, 308);
   }
 
-  // 2) Redirect any non-www custom host -> www.picklepathway.com in production
-  //    (skip vercel preview/local)
-  const isNonWwwCustom =
-    isProd &&
-    !isVercelPreview &&
-    !isLocal &&
-    host !== CANONICAL_HOST;
+  // 2) Resolve custom domain -> org and set cookie
+  //    Skip on preview/local to keep DX fast.
+  let orgIdToSet = null;
 
-  if (isNonWwwCustom) {
-    url.hostname = CANONICAL_HOST;
-    // preserve path/search
-    return NextResponse.redirect(url, 308);
-  }
+  if (!previewOrLocal) {
+    try {
+      // If host is your canonical app domain, we don't change org cookie here.
+      if (host !== CANONICAL_HOST) {
+        const supa = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+          { global: { headers: { "X-App-Env": env } } }
+        );
 
-  // 3) Optional: preview-only Basic Auth for /admin (not in prod)
-  if (url.pathname.startsWith("/admin") && !isProd) {
-    const header = req.headers.get("authorization") || "";
-    const [type, creds] = header.split(" ");
-    let user = "", pass = "";
-    if (type === "Basic" && creds) {
-      try {
-        const decoded =
-          typeof atob === "function" ? atob(creds) : Buffer.from(creds, "base64").toString("utf8");
-        [user, pass] = decoded.split(":");
-      } catch {}
-    }
-    const ok = user === "admin" && !!process.env.ADMIN_PASSWORD && pass === process.env.ADMIN_PASSWORD;
-    if (!ok) {
-      return new NextResponse("Unauthorized", {
-        status: 401,
-        headers: { "WWW-Authenticate": 'Basic realm="Admin (preview only)"' },
-      });
+        // Query the public view of verified sites
+        const { data, error } = await supa
+          .from("sites_public")
+          .select("org_id")
+          .eq("host", host)
+          .maybeSingle();
+
+        if (!error && data?.org_id) {
+          orgIdToSet = String(data.org_id);
+        }
+      }
+    } catch {
+      // noop; don't block navigation if supabase edge call fails
     }
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+
+  // If we found a mapping, set cookie for downstream routes (SSR, API reads)
+  if (orgIdToSet) {
+    res.cookies.set("org_id", orgIdToSet, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: env === "production",
+      maxAge: 60 * 60 * 24 * 365, // 1 year
+    });
+  }
+
+  return res;
 }
