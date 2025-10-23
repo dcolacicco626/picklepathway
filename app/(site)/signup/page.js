@@ -49,7 +49,7 @@ export default function SignupPage() {
         .insert({ user_id: user.id, org_id: org.id, role: "admin" });
       if (memErr && !String(memErr.message).includes("duplicate")) throw memErr;
 
-      router.replace(`/admin/${org.slug}`);
+      router.replace(`/admin/`);
     } catch (e) {
       setMsg(e?.message || String(e));
     }
