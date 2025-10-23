@@ -23,16 +23,15 @@ export async function POST(req) {
 
   const supa = createClient(need("NEXT_PUBLIC_SUPABASE_URL"), need("SUPABASE_SERVICE_ROLE_KEY"));
 
-  // Optional: verify the requester really belongs to this org.
-  // If you have a userId in a header/session, validate it here before setting.
-  // For now we just set the cookie.
-  const res = NextResponse.json({ ok: true, orgId });
-  res.cookies.set("org_id", String(orgId), {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    secure: true,           // true in prod (your site is HTTPS)
-    maxAge: 60 * 60 * 24 * 365, // 1 year
-  });
+// app/api/admin/active-org/route.js
+const isProd = process.env.NODE_ENV === "production";
+res.cookies.set("org_id", String(orgId), {
+  path: "/",
+  httpOnly: true,
+  sameSite: "lax",
+  secure: isProd,          // <- only secure in prod
+  maxAge: 60 * 60 * 24 * 365,
+});
+
   return res;
 }

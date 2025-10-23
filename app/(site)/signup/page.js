@@ -57,7 +57,7 @@ await fetch("/api/admin/active-org", {
 });
 
 // ✅ Redirect to admin dashboard
-router.replace(`/admin/`);
+router.replace(`/admin`);
 
     } catch (e) {
       setMsg(e?.message || String(e));
