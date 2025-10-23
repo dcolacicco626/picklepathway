@@ -25,14 +25,37 @@ export async function POST(req) {
     const body = await req.json().catch(() => ({}));
     const { priceId, plan, orgId: orgIdFromBody } = body;
 
-    // Resolve price from explicit priceId or plan mapping
-    let price = priceId || (plan ? PRICE[plan] : null);
-    if (!price) {
-      return NextResponse.json(
-        { error: "Missing price. Provide priceId or use a plan that maps to STRIPE_PRICE_* envs." },
-        { status: 400 }
-      );
-    }
+// --- resolve price ---
+let price = priceId || (plan ? PRICE[plan] : null);
+
+if (!price) {
+  // Fallback: allow plan names that match a Stripe price.lookup_key
+  // Example: create a price in Stripe with lookup_key = "pro"
+  try {
+    const stripe = getStripe();
+    const pr = await stripe.prices.list({
+      lookup_keys: plan ? [plan] : undefined,
+      active: true,
+      limit: 1,
+      expand: ["data.product"],
+    });
+    price = pr?.data?.[0]?.id || null;
+  } catch (e) {
+    // ignore and fall through to 400
+  }
+}
+
+if (!price) {
+  return NextResponse.json(
+    {
+      error:
+        "Missing price. Provide `priceId`, or set STRIPE_PRICE_PRO (or create a Stripe price with lookup_key='pro').",
+    },
+    { status: 400 }
+  );
+}
+// --- end resolve price ---
+
 
     // Resolve orgId (body → cookie → last used)
     let orgId = orgIdFromBody ?? c.get("active_org")?.value ?? null;
