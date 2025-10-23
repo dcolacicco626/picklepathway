@@ -6,6 +6,13 @@ import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { getStripe } from "@/lib/stripe";
 
+const PRICE = {
+  pro: process.env.STRIPE_PRICE_PRO,           // e.g. price_123 for monthly
+  pro_yearly: process.env.STRIPE_PRICE_PRO_Y,  // optional yearly
+  // add other plans if you have them
+};
+
+
 export async function POST(req) {
   try {
     const supabase = createRouteHandlerClient({ cookies });
@@ -15,7 +22,21 @@ export async function POST(req) {
     if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
-    const { priceId, plan, orgId: orgIdFromBody } = body;
+  const { priceId, plan, orgId: orgIdFromBody } = body;
+
+// resolve orgId as you already do… (unchanged)
+
+let price = priceId;
+if (!price && plan) {
+  price = PRICE[plan];
+}
+if (!price) {
+  return NextResponse.json(
+    { error: "Missing price. Provide priceId or a plan with a configured STRIPE_PRICE_* env." },
+    { status: 400 }
+  );
+}
+
 
     let orgId = orgIdFromBody ?? c.get("active_org")?.value ?? null;
     if (!orgId) {
