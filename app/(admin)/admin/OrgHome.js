@@ -619,6 +619,45 @@ async function openPortal() {
   </div>
 )}
 
+async function handleUpgradeClick(selectedOrgId) {
+  try {
+    // 1) Ensure / set active org
+    const res = await fetch("/api/admin/active-org", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(selectedOrgId ? { orgId: selectedOrgId } : {}),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error || "Please switch to a club first.");
+      return;
+    }
+
+    // 2) Create Stripe checkout session (your existing route)
+    const stripeRes = await fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: data.orgId, plan: "pro" }),
+    });
+
+    const stripeData = await stripeRes.json();
+
+    if (!stripeRes.ok || !stripeData.url) {
+      alert("Could not start checkout. Please try again.");
+      return;
+    }
+
+    // 3) Redirect to Stripe
+    window.location.href = stripeData.url;
+  } catch (err) {
+    console.error("Upgrade error:", err);
+    alert("Something went wrong. Please try again.");
+  }
+}
+
+
 
   return (
     <main className={`${brand.bg} ${brand.text} min-h-screen`}>
@@ -1005,12 +1044,17 @@ async function openPortal() {
      </div>
 
      <div className="flex flex-wrap gap-3">
- <button
-  onClick={() => (isTrial ? openCheckout("pro") : openPortal())}
+<Button
+  onClick={() =>
+    isTrial
+      ? handleUpgradeClick(activeOrgId) // ✅ new function
+      : openPortal()
+  }
   className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}
 >
   {isTrial ? "Upgrade to Pro" : "Manage membership"}
-</button>
+</Button>
+
 
        <button
          onClick={loadMembership}
