@@ -1,3 +1,4 @@
+// app/api/billing/checkout/route.js
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -7,11 +8,9 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { getStripe } from "@/lib/stripe";
 
 const PRICE = {
-  pro: process.env.STRIPE_PRICE_PRO,           // e.g. price_123 for monthly
-  pro_yearly: process.env.STRIPE_PRICE_PRO_Y,  // optional yearly
-  // add other plans if you have them
+  pro: process.env.STRIPE_PRICE_PRO,          // e.g. price_123 (monthly)
+  pro_yearly: process.env.STRIPE_PRICE_PRO_Y, // optional yearly
 };
-
 
 export async function POST(req) {
   try {
@@ -19,48 +18,53 @@ export async function POST(req) {
     const c = cookies();
 
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (authErr || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const body = await req.json().catch(() => ({}));
-  const { priceId, plan, orgId: orgIdFromBody } = body;
+    const { priceId, plan, orgId: orgIdFromBody } = body;
 
-// resolve orgId as you already do… (unchanged)
+    // Resolve price from explicit priceId or plan mapping
+    let price = priceId || (plan ? PRICE[plan] : null);
+    if (!price) {
+      return NextResponse.json(
+        { error: "Missing price. Provide priceId or use a plan that maps to STRIPE_PRICE_* envs." },
+        { status: 400 }
+      );
+    }
 
-let price = priceId;
-if (!price && plan) {
-  price = PRICE[plan];
-}
-if (!price) {
-  return NextResponse.json(
-    { error: "Missing price. Provide priceId or a plan with a configured STRIPE_PRICE_* env." },
-    { status: 400 }
-  );
-}
-
-
+    // Resolve orgId (body → cookie → last used)
     let orgId = orgIdFromBody ?? c.get("active_org")?.value ?? null;
     if (!orgId) {
       const { data: m } = await supabase
-        .from("memberships").select("org_id")
-        .eq("user_id", user.id).order("last_used_at", { ascending: false })
-        .limit(1).maybeSingle();
+        .from("memberships")
+        .select("org_id")
+        .eq("user_id", user.id)
+        .order("last_used_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
       orgId = m?.org_id ?? null;
     }
     if (!orgId) return NextResponse.json({ error: "No active org" }, { status: 400 });
 
+    // Verify membership
     const { data: membership } = await supabase
-      .from("memberships").select("org_id")
-      .eq("org_id", orgId).eq("user_id", user.id).maybeSingle();
+      .from("memberships")
+      .select("org_id")
+      .eq("org_id", orgId)
+      .eq("user_id", user.id)
+      .maybeSingle();
     if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    // Fetch org to reuse Stripe customer if exists
+    // Reuse existing Stripe customer if present
     const { data: org } = await supabase
-      .from("orgs").select("stripe_customer_id").eq("id", orgId).single();
+      .from("orgs")
+      .select("stripe_customer_id")
+      .eq("id", orgId)
+      .single();
 
     const stripe = getStripe();
-
-    const price = priceId /* or map plan->price here */;
-    if (!price) return NextResponse.json({ error: "Missing priceId" }, { status: 400 });
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
