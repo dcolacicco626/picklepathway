@@ -616,7 +616,7 @@ async function openCheckout(tier = "pro") {
 
 async function openPortal() {
   try {
-    // Ensure/set active org first (same pattern as Upgrade)
+    // 1) Ensure active org cookie first
     const ensure = await fetch("/api/admin/active-org", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -627,16 +627,15 @@ async function openPortal() {
       alert(ej.error || "Please switch to a club first.");
       return;
     }
-
     const orgId = ej.orgId;
 
-    // Ask server for current membership + a Stripe portal URL
+    // 2) Ask server for membership status (and portal URL if any)
     const r = await fetch("/api/membership/status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orgId }),
+      cache: "no-store",
     });
-
     const j = await r.json();
 
     if (!r.ok) {
@@ -644,19 +643,27 @@ async function openPortal() {
       return;
     }
 
-    // If server returns a portal URL, go there
+    // 3) If we have a billing portal URL, go there
     if (j.portal_url) {
       window.location.href = j.portal_url;
       return;
     }
 
-    // Otherwise, show whatever status you need
-    console.log("Membership status:", j);
-  } catch (err) {
-    console.error("openPortal error", err);
+    // 4) No Stripe customer yet → offer to upgrade now
+    const go = confirm(
+      "No billing portal yet for this club (no subscription on file). Start your subscription now?"
+    );
+    if (go) {
+      await handleUpgradeClick(orgId);
+    } else {
+      alert("You can upgrade anytime from Admin Settings → Upgrade to Pro.");
+    }
+  } catch (e) {
+    console.error("openPortal error", e);
     alert("Something went wrong. Please try again.");
   }
 }
+
 
 
 
