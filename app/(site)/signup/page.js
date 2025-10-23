@@ -38,7 +38,7 @@ export default function SignupPage() {
       // Create org
       const { data: org, error: orgErr } = await supabase
         .from("orgs")
-        .insert({ name: clubName, slug, plan: "starter" })
+        .insert({ name: clubName, slug, plan: "Starter" })
         .select("id, slug")
         .maybeSingle();
       if (orgErr) throw orgErr;
@@ -46,7 +46,7 @@ export default function SignupPage() {
       // Link membership (owner)
       const { error: memErr } = await supabase
         .from("memberships")
-        .insert({ user_id: user.id, org_id: org.id, role: "owner" });
+        .insert({ user_id: user.id, org_id: org.id, role: "admin" });
       if (memErr && !String(memErr.message).includes("duplicate")) throw memErr;
 
       router.replace(`/admin/${org.slug}`);
