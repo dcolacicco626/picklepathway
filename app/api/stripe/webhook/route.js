@@ -11,6 +11,34 @@ const need = (k) => {
   return v;
 };
 
+// Map Stripe price IDs to canonical plans your app understands
+const PRICE_TO_PLAN = {
+  [process.env.STRIPE_PRICE_STARTER]: "starter",
+  [process.env.STRIPE_PRICE_PRO]: "pro",
+};
+
+async function updateOrgFromSubscription(supa, sub, fallbackCustomerId) {
+  // Determine plan from price id
+  const price = sub?.items?.data?.[0]?.price || null;
+  const priceId = price?.id || null;
+  const plan = PRICE_TO_PLAN[priceId] || null;
+
+  // Compute active_until from Stripe period end (ms)
+  const activeUntil = sub?.current_period_end
+    ? new Date(sub.current_period_end * 1000).toISOString()
+    : null;
+
+  const payload = {
+    plan, // may be null if price isn't mapped (won't overwrite if you like)
+    subscription_status: sub?.status || null,
+    active_until: activeUntil,
+    stripe_subscription_id: sub?.id || null,
+    stripe_customer_id: (typeof sub?.customer === "string" ? sub.customer : null) || fallbackCustomerId || null,
+  };
+
+  return payload;
+}
+
 export async function POST(req) {
   // ----- 1) Verify signature -----
   const sig = req.headers.get("stripe-signature");
@@ -31,84 +59,111 @@ export async function POST(req) {
     return new Response(`Webhook Error: ${err.message}`, { status: isSigErr ? 400 : 500 });
   }
 
-  // ----- 2) Handle only subscription-related events -----
+  // ----- 2) Handle subscription lifecycle events -----
   try {
-    if (
-      event.type !== "checkout.session.completed" &&
-      event.type !== "customer.subscription.updated" &&
-      event.type !== "customer.subscription.deleted"
-    ) {
-      // acknowledge everything else to prevent retries
-      return new Response("ok", { status: 200 });
-    }
-
+    const stripe = getStripe();
     const supa = createClient(
       need("NEXT_PUBLIC_SUPABASE_URL"),
       need("SUPABASE_SERVICE_ROLE_KEY")
     );
 
-    if (event.type === "checkout.session.completed") {
-      const s = event.data.object;
-      const orgId = s?.metadata?.org_id || s?.subscription_details?.metadata?.org_id || null;
-      const customerId = s?.customer || null;
-      const subscriptionId = s?.subscription || null;
+    // Helper to locate org by metadata OR by subscription/customer
+    async function resolveOrgId({ metadataOrgId, subscriptionId, customerId }) {
+      if (metadataOrgId) return metadataOrgId;
 
-      if (!orgId || !subscriptionId) {
+      // try by subscription id
+      if (subscriptionId) {
+        const { data: orgBySub } = await supa
+          .from("orgs")
+          .select("id")
+          .eq("stripe_subscription_id", subscriptionId)
+          .maybeSingle();
+        if (orgBySub?.id) return orgBySub.id;
+      }
+
+      // try by customer id
+      if (customerId) {
+        const { data: orgByCust } = await supa
+          .from("orgs")
+          .select("id")
+          .eq("stripe_customer_id", customerId)
+          .maybeSingle();
+        if (orgByCust?.id) return orgByCust.id;
+      }
+
+      return null;
+    }
+
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const s = event.data.object;
+        const metadataOrgId =
+          s?.metadata?.org_id ||
+          s?.subscription_details?.metadata?.org_id || // older format fallback (rare)
+          null;
+
+        const customerId = typeof s?.customer === "string" ? s.customer : null;
+        const subscriptionId = typeof s?.subscription === "string" ? s.subscription : null;
+
+        const orgId = await resolveOrgId({ metadataOrgId, subscriptionId, customerId });
+        if (!orgId || !subscriptionId) return new Response("ok", { status: 200 });
+
+        // Pull full subscription to get price + status + period end
+        const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ["items.data.price"] });
+        const patch = await updateOrgFromSubscription(supa, sub, customerId);
+
+        const { error } = await supa
+          .from("orgs")
+          .update(patch)
+          .eq("id", orgId);
+
+        if (error) console.error("❌ supabase update (session.completed):", error);
         return new Response("ok", { status: 200 });
       }
 
-      const stripe = getStripe();
-      const sub = await stripe.subscriptions.retrieve(subscriptionId);
-      const price = sub.items?.data?.[0]?.price;
-      const plan = price?.nickname || price?.id || "unknown";
-      const activeUntil = new Date(sub.current_period_end * 1000).toISOString();
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+        const sub = event.data.object;
 
-      console.log("stripe_update_org", { event: event.type, orgId, plan, active_until: activeUntil });
+        // orgId via explicit metadata (best), else look up by subscription or customer
+        const metadataOrgId = sub?.metadata?.org_id || null;
+        const customerId = typeof sub?.customer === "string" ? sub.customer : null;
+        const orgId = await resolveOrgId({ metadataOrgId, subscriptionId: sub?.id, customerId });
 
-      const { error } = await supa
-        .from("orgs")
-        .update({
-          stripe_customer_id: customerId,
-          stripe_subscription_id: subscriptionId,
-          plan,
-          active_until: activeUntil,
-        })
-        .eq("id", orgId);
+        if (!orgId) return new Response("ok", { status: 200 });
 
-      if (error) console.error("❌ supabase update (session.completed):", error);
-      return new Response("ok", { status: 200 });
-    }
+        if (event.type === "customer.subscription.deleted") {
+          // Clear subscription + revert to trial
+          const { error } = await supa
+            .from("orgs")
+            .update({
+              plan: "trial",
+              subscription_status: "canceled",
+              active_until: new Date().toISOString(),
+              stripe_subscription_id: null,
+              stripe_customer_id: customerId || null, // keep customer id if we know it
+            })
+            .eq("id", orgId);
+          if (error) console.error("❌ supabase update (sub.deleted):", error);
+          return new Response("ok", { status: 200 });
+        }
 
-    if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
-      const sub = event.data.object;
-      const orgId = sub?.metadata?.org_id || null;
-      if (!orgId) {
+        // created/updated → sync details
+        const patch = await updateOrgFromSubscription(supa, sub, customerId);
+        const { error } = await supa
+          .from("orgs")
+          .update(patch)
+          .eq("id", orgId);
+        if (error) console.error("❌ supabase update (sub.updated/created):", error);
         return new Response("ok", { status: 200 });
       }
 
-      const price = sub?.items?.data?.[0]?.price || null;
-      const plan = price?.nickname || price?.id || null;
-      const activeUntil = sub?.current_period_end
-        ? new Date(sub.current_period_end * 1000).toISOString()
-        : null;
-
-      console.log("stripe_update_org", { event: event.type, orgId, plan, active_until: activeUntil });
-
-      const { error } = await supa
-        .from("orgs")
-        .update({
-          stripe_subscription_id: sub.id,
-          plan,
-          active_until: activeUntil,
-        })
-        .eq("id", orgId);
-
-      if (error) console.error("❌ supabase update (sub.updated/deleted):", error);
-      return new Response("ok", { status: 200 });
+      default: {
+        // acknowledge everything else to prevent retries
+        return new Response("ok", { status: 200 });
+      }
     }
-
-    // fallback (shouldn't hit because we returned above)
-    return new Response("ok", { status: 200 });
   } catch (err) {
     console.error("❌ Handler error:", err);
     return new Response("Internal error", { status: 500 });
