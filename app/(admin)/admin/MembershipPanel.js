@@ -234,7 +234,7 @@ export default function MembershipPanel({ membership, activeOrgId }) {
   )}
 </div>
 
-      )}
+      
     </div>
   );
 }
