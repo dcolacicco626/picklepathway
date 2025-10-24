@@ -8,6 +8,7 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { getStripe } from "@/lib/stripe";
 
 const PRICE = {
+starter: process.env.STRIPE_PRICE_STARTER,
   pro: process.env.STRIPE_PRICE_PRO,          // e.g. price_123 (monthly)
   pro_yearly: process.env.STRIPE_PRICE_PRO_Y, // optional yearly
 };

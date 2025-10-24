@@ -102,12 +102,13 @@ export default function MembershipPanel({ membership, activeOrgId }) {
 
   function Card({ title, price, bullets, cta, onClick, muted, badge }) {
     return (
-      <div
-        className={
-          "flex-1 rounded-xl border p-5 " +
-          (muted ? "opacity-60" : "opacity-100")
-        }
-      >
+<div
+  className={
+    "flex-1 rounded-xl border p-5 shadow-[0_0_8px_rgba(16,185,129,0.15)] transition-shadow hover:shadow-[0_0_12px_rgba(16,185,129,0.25)] " +
+    (muted ? "opacity-60" : "opacity-100")
+  }
+>
+
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">{title}</h3>
           {badge && (
@@ -138,19 +139,17 @@ export default function MembershipPanel({ membership, activeOrgId }) {
   return (
     <div className="space-y-6">
       <div className="flex gap-4 flex-col md:flex-row">
-        {/* Free / Trial */}
-        <Card
-          title="Free"
-          price="2-week free trial"
-          bullets={[
-            `${remaining} day${remaining === 1 ? "" : "s"} remaining`,
-            "Kick the tires",
-          ]}
-          badge={isTrial ? "Current plan" : null}
-          muted={!isTrial && !remaining}
-          cta={isTrial ? "Upgrade to Starter" : null}
-          onClick={() => upgradeTo("starter")}
-        />
+ <Card
+  title="Free"
+  price="2-week free trial"
+  bullets={[
+    `${remaining} day${remaining === 1 ? "" : "s"} remaining`,
+   
+  ]}
+  badge={isTrial ? "Current plan" : null}
+  muted={!isTrial && !remaining}
+/>
+
 
         {/* Starter */}
         <Card
@@ -181,60 +180,60 @@ export default function MembershipPanel({ membership, activeOrgId }) {
         />
       </div>
 
-      {/* Cancel section */}
-      {(isStarter || isPro) && (
-        <div className="pt-3 border-t">
-          {!cancelOpen ? (
-            <button
-              onClick={() => setCancelOpen(true)}
-              className="text-red-600 hover:underline"
-            >
-              Cancel membership
-            </button>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <span>Reason:</span>
-                <select
-                  className="border rounded-md px-2 py-1"
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                >
-                  <option value="">Select…</option>
-                  <option value="too_expensive">Too expensive</option>
-                  <option value="features_missing">Missing features</option>
-                  <option value="hard_to_use">Hard to use</option>
-                  <option value="temporary_need">Temporary need ended</option>
-                  <option value="switching_tools">Switching tools</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              {cancelReason === "other" && (
-                <input
-                  className="border rounded-md px-2 py-1 w-full"
-                  placeholder="Tell us more (optional)"
-                  value={cancelOther}
-                  onChange={(e) => setCancelOther(e.target.value)}
-                />
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={cancelNow}
-                  disabled={busy}
-                  className="px-3 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-                >
-                  Yes, cancel
-                </button>
-                <button
-                  onClick={() => setCancelOpen(false)}
-                  className="px-3 py-2 rounded-md border"
-                >
-                  Never mind
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+{/* Cancel section — always visible */}
+<div className="pt-3 border-t">
+  {!cancelOpen ? (
+    <button
+      onClick={() => setCancelOpen(true)}
+      className="text-red-600 hover:underline"
+    >
+      Cancel membership
+    </button>
+  ) : (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <span>Reason:</span>
+        <select
+          className="border rounded-md px-2 py-1"
+          value={cancelReason}
+          onChange={(e) => setCancelReason(e.target.value)}
+        >
+          <option value="">Select…</option>
+          <option value="too_expensive">Too expensive</option>
+          <option value="features_missing">Missing features</option>
+          <option value="hard_to_use">Hard to use</option>
+          <option value="temporary_need">Temporary need ended</option>
+          <option value="switching_tools">Switching tools</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      {cancelReason === "other" && (
+        <input
+          className="border rounded-md px-2 py-1 w-full"
+          placeholder="Tell us more (optional)"
+          value={cancelOther}
+          onChange={(e) => setCancelOther(e.target.value)}
+        />
+      )}
+      <div className="flex gap-2">
+        <button
+          onClick={cancelNow}
+          disabled={busy}
+          className="px-3 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+        >
+          Yes, cancel
+        </button>
+        <button
+          onClick={() => setCancelOpen(false)}
+          className="px-3 py-2 rounded-md border"
+        >
+          Never mind
+        </button>
+      </div>
+    </div>
+  )}
+</div>
+
       )}
     </div>
   );
