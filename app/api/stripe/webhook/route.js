@@ -49,7 +49,8 @@ export async function POST(req) {
     const buf = Buffer.from(await req.arrayBuffer());
     const stripe = getStripe();
     event = stripe.webhooks.constructEvent(buf, sig, need("STRIPE_WEBHOOK_SECRET"));
-    console.log("stripe_webhook", { type: event.type });
+   console.log("[WH] type", event.type);
+
   } catch (err) {
     console.error("❌ Webhook verify/env error:", err);
     const isSigErr =
@@ -107,10 +108,19 @@ export async function POST(req) {
 
         const orgId = await resolveOrgId({ metadataOrgId, subscriptionId, customerId });
         if (!orgId || !subscriptionId) return new Response("ok", { status: 200 });
+  console.log("[WH] session.completed", {
+    orgId,
+    subscriptionId,
+    customerId,
+  });
+
+
 
         // Pull full subscription to get price + status + period end
         const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ["items.data.price"] });
         const patch = await updateOrgFromSubscription(supa, sub, customerId);
+  console.log("[WH] patch", patch);
+
 
         const { error } = await supa
           .from("orgs")
@@ -125,6 +135,12 @@ export async function POST(req) {
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         const sub = event.data.object;
+  console.log("[WH] sub", event.type, {
+    subId: sub?.id,
+    status: sub?.status,
+    priceId: sub?.items?.data?.[0]?.price?.id,
+  });
+
 
         // orgId via explicit metadata (best), else look up by subscription or customer
         const metadataOrgId = sub?.metadata?.org_id || null;
