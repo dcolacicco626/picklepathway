@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { AnimatePresence, motion } from "framer-motion";
+import MembershipPanel from "./MembershipPanel";
+
 
 
 /* ========= Theme ========= */
@@ -1089,83 +1091,13 @@ const stripeRes = await fetch("/api/billing/checkout", {
             </div>
           )}
 
-          {/* --- Manage Membership --- */}
-       {settingsTab === "membership" && (
-   <div className="space-y-5">
-     <div className="text-sm text-slate-600">
-       <div className="font-medium text-slate-800">Current plan</div>
-       <div className="mt-1">
-         {isTrial ? (
-           <>Free Trial — <strong>{remaining}</strong> {remaining === 1 ? "day" : "days"} remaining</>
-         ) : (
-           <>{membership?.plan?.toUpperCase() || "PRO"}</>
-         )}
-       </div>
-       {isLocked && (
-         <div className="mt-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-           Your trial has ended. Upgrade to continue creating and managing leagues.
-         </div>
-       )}
-     </div>
-
-     <div className="flex flex-wrap gap-3">
-<button
-  onClick={() =>
-    isTrial ? handleUpgradeClick(activeOrgId) : openPortal()
-  }
-  className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}
->
-  {isTrial ? "Upgrade to Pro" : "Manage membership"}
-</button>
-
-
-
-       <button
-         onClick={loadMembership}
-         className={`px-4 py-2 rounded-xl ${brand.ctaOutline}`}
-       >
-         Refresh status
-       </button>
-     </div>
-
-     <div className="border-t border-slate-200 pt-5">
-       <div className="font-medium text-slate-800 mb-2">Promo code</div>
-       <div className="flex gap-2">
-         <input
-           value={promoInput}
-           onChange={(e) => setPromoInput(e.target.value)}
-           placeholder="Enter promo code"
-           className={`px-3 py-2 rounded-xl ${brand.border}`}
-         />
-         <button
-           onClick={async () => {
-             try {
-               const headers = await authHeaders();
-               const res = await fetch("/api/membership/promo", {
-                 method: "POST",
-                 headers: { "Content-Type": "application/json", ...headers },
-                 body: JSON.stringify({ orgId, promoCode: promoInput }),
-               });
-               const json = await res.json();
-               if (!res.ok) throw new Error(json?.error || "Failed to apply code");
-               setPromoInput("");
-               setSettingsMsg("Promo code saved.");
-               await loadMembership();
-             } catch (e) {
-               setSettingsMsg(e?.message || "Could not apply promo code");
-             }
-           }}
-           className={`px-4 py-2 rounded-xl ${brand.cta} hover:bg-[#0b8857]`}
-         >
-           Apply
-         </button>
-       </div>
-       {membership?.promo_code ? (
-         <div className="text-xs text-slate-500 mt-2">Current promo code: {membership.promo_code}</div>
-       ) : null}
-     </div>
-   </div>
- )}
+         {/* --- Manage Membership --- */}
+{settingsTab === "membership" && (
+  <MembershipPanel
+    membership={membership}
+    activeOrgId={activeOrgId}
+  />
+)}
 
           {/* --- Email Templates --- */}
           {settingsTab === "emails" && (
